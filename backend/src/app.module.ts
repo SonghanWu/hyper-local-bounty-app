@@ -3,6 +3,10 @@ import { ConfigModule } from '@nestjs/config';
 import { DatabaseModule } from './config/database.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+import { RedisModule } from './redis/redis.module';
+import { LocationModule } from './location/location.module';
 
 @Module({
   imports: [
@@ -13,6 +17,13 @@ import { AppService } from './app.service';
     }),
     // Database connection
     DatabaseModule,
+    // Redis connection
+    RedisModule,
+    // Auth & Users
+    AuthModule,
+    UsersModule,
+    // Location services
+    LocationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
