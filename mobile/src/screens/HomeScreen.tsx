@@ -147,8 +147,13 @@ export default function HomeScreen({ navigation }: Props) {
         text: 'Logout',
         style: 'destructive',
         onPress: async () => {
-          // Stop tracking and disconnect
+          // Stop tracking
           locationService.stopTracking();
+
+          // Send logout event to disable push notifications
+          await websocketService.logout();
+
+          // Disconnect WebSocket
           websocketService.disconnect();
 
           // Clear storage

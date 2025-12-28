@@ -160,7 +160,29 @@ class WebSocketService {
   }
 
   /**
-   * Disconnect WebSocket
+   * Logout (disable push notifications)
+   */
+  async logout(): Promise<boolean> {
+    if (!this.socket || !this.isConnected) {
+      console.error('❌ WebSocket not connected');
+      return false;
+    }
+
+    return new Promise((resolve) => {
+      this.socket?.emit('logout', {}, (response: any) => {
+        if (response.success) {
+          console.log('🚪 Logged out successfully');
+          resolve(true);
+        } else {
+          console.error('❌ Failed to logout:', response.error);
+          resolve(false);
+        }
+      });
+    });
+  }
+
+  /**
+   * Disconnect WebSocket (for backgrounding app)
    */
   disconnect() {
     if (this.socket) {

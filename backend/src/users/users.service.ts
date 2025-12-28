@@ -26,4 +26,24 @@ export class UsersService {
     const user = this.usersRepository.create(userData);
     return this.usersRepository.save(user);
   }
+
+  async updateUserLocation(
+    userId: string,
+    locationData: {
+      lastLatitude: number;
+      lastLongitude: number;
+      lastLocationUpdatedAt: Date;
+    },
+  ): Promise<void> {
+    await this.usersRepository.update(userId, locationData);
+  }
+
+  async updatePushNotifications(
+    userId: string,
+    enabled: boolean,
+  ): Promise<void> {
+    await this.usersRepository.update(userId, {
+      pushNotificationsEnabled: enabled,
+    });
+  }
 }

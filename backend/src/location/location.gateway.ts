@@ -11,6 +11,7 @@ import { Server, Socket } from 'socket.io';
 import { UseGuards } from '@nestjs/common';
 import { RedisService } from '../redis/redis.service';
 import { JwtService } from '@nestjs/jwt';
+import { UsersService } from '../users/users.service';
 
 interface LocationUpdatePayload {
   latitude: number;
@@ -32,6 +33,7 @@ export class LocationGateway
   constructor(
     private redisService: RedisService,
     private jwtService: JwtService,
+    private usersService: UsersService,
   ) {}
 
   async handleConnection(client: Socket) {
@@ -61,9 +63,37 @@ export class LocationGateway
   async handleDisconnect(client: Socket) {
     const userId = client.data.userId;
     if (userId) {
-      // Optionally remove user location from Redis when they disconnect
-      // await this.redisService.removeUserLocation(userId);
+      // Remove user location from Redis when they disconnect
+      // (This happens for both logout and backgrounding)
+      await this.redisService.removeUserLocation(userId);
       console.log(`❌ User ${userId} disconnected from WebSocket`);
+    }
+  }
+
+  @SubscribeMessage('logout')
+  async handleLogout(@ConnectedSocket() client: Socket) {
+    const userId = client.data.userId;
+
+    if (!userId) {
+      return { error: 'Unauthorized' };
+    }
+
+    try {
+      // Disable push notifications for logged out users
+      await this.usersService.updatePushNotifications(userId, false);
+
+      // Remove from Redis
+      await this.redisService.removeUserLocation(userId);
+
+      console.log(`🚪 User ${userId} logged out - push notifications disabled`);
+
+      return {
+        success: true,
+        message: 'Logged out successfully',
+      };
+    } catch (error) {
+      console.error('Failed to handle logout:', error);
+      return { error: 'Failed to logout' };
     }
   }
 
@@ -93,8 +123,15 @@ export class LocationGateway
     }
 
     try {
-      // Update location in Redis
+      // Update location in Redis (for real-time queries)
       await this.redisService.updateUserLocation(userId, longitude, latitude);
+
+      // Update location in PostgreSQL (for persistent storage and push notifications)
+      await this.usersService.updateUserLocation(userId, {
+        lastLatitude: latitude,
+        lastLongitude: longitude,
+        lastLocationUpdatedAt: new Date(),
+      });
 
       console.log(`📍 Updated location for user ${userId}: (${latitude}, ${longitude})`);
 

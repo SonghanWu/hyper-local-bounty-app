@@ -46,6 +46,11 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       latitude,
       member: userId,
     });
+
+    // Set TTL marker - expires in 5 minutes (300 seconds)
+    // If user doesn't update location for 5 minutes, they're considered offline
+    const ttlKey = `user:${userId}:location_active`;
+    await this.client.setEx(ttlKey, 300, '1');
   }
 
   /**
@@ -61,13 +66,30 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   ): Promise<any> {
     const key = 'users:locations';
     // Using type assertion due to Redis client type definition issues
-    return await (this.client as any).geoRadiusWith(
+    const allUsers = await (this.client as any).geoRadiusWith(
       key,
       { longitude, latitude },
       radiusInMeters,
       'm',
       ['WITHDIST', 'WITHCOORD'],
     );
+
+    // Filter out users whose TTL has expired (inactive for 5+ minutes)
+    const activeUsers = [];
+    for (const user of allUsers) {
+      const userId = user.member;
+      const ttlKey = `user:${userId}:location_active`;
+      const isActive = await this.client.exists(ttlKey);
+
+      if (isActive) {
+        activeUsers.push(user);
+      } else {
+        // Clean up stale location data
+        await this.removeUserLocation(userId);
+      }
+    }
+
+    return activeUsers;
   }
 
   /**
@@ -77,5 +99,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async removeUserLocation(userId: string): Promise<void> {
     const key = 'users:locations';
     await this.client.zRem(key, userId);
+
+    // Also remove TTL marker
+    const ttlKey = `user:${userId}:location_active`;
+    await this.client.del(ttlKey);
   }
 }
