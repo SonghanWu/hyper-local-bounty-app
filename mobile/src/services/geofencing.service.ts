@@ -24,7 +24,7 @@ class GeofencingService {
     autoPromptCancel: true,
     notificationEnabled: true,
   };
-  private alertCooldown = 60000; // Alert once per minute per order
+  private alertCooldown = 300000; // Alert once per 5 minutes per order
 
   /**
    * Initialize notification permissions

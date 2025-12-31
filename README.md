@@ -128,7 +128,7 @@ This script will:
   - Helper: Monitored when order is ACCEPTED (stay near the task location!)
 - Local push notifications when user moves >500m away from order location
 - In-app alert with option to cancel order
-- Cooldown mechanism (1 alert per minute) to prevent notification spam
+- Cooldown mechanism (1 alert per 5 minutes) to prevent notification spam
 - Haversine formula distance calculation
 - Auto-cleanup when order is completed or cancelled
 

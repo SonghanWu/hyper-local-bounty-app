@@ -972,7 +972,7 @@ FRONTEND_URL=exp://192.168.x.x:8081  # Expo development URL
 当用户（Requester或Helper）距离订单位置超过500米时：
 1. ✅ 发送本地通知提醒用户"您已远离订单位置"
 2. ✅ 显示警告弹窗询问是否取消订单
-3. ✅ 每分钟最多一次提醒（防止spam，即cooldown机制）
+3. ✅ 每5分钟最多一次提醒（防止spam，即cooldown机制）
 4. ✅ Requester监控：发布订单时自动启动，PENDING/ACCEPTED状态时持续监控
 5. ✅ Helper监控：接受订单时自动启动，ACCEPTED状态时监控
 6. ✅ 自动清理：订单完成/取消时停止监控
