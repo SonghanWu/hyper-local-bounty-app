@@ -21,5 +21,6 @@ import { UsersModule } from '../users/users.module';
     }),
   ],
   providers: [LocationGateway],
+  exports: [LocationGateway],
 })
 export class LocationModule {}

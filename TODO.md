@@ -3,10 +3,10 @@
 ## 1. Map Integration (地图功能)
 
 ### 需求
-- 实时地图显示附近在线用户位置
-- 地图显示附近订单（bounties）
+- 实时地图显示附近订单（bounties）位置
 - 当前用户位置标记
-- 点击用户/订单显示详情
+- 点击订单marker显示详情（标题、赏金、距离）
+- 不同订单状态用不同颜色标记（PENDING/ACCEPTED）
 
 ### 技术方案
 **React Native地图库选择：**
@@ -21,32 +21,35 @@
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
 export default function MapScreen() {
-  const [nearbyUsers, setNearbyUsers] = useState([]);
+  const [nearbyOrders, setNearbyOrders] = useState([]);
   const [currentLocation, setCurrentLocation] = useState(null);
+  const [searchRadius, setSearchRadius] = useState(2000); // Default 2km
 
   // 1. 获取当前位置
   useEffect(() => {
     locationService.getCurrentLocation().then(setCurrentLocation);
   }, []);
 
-  // 2. 定期查询附近用户（每10秒）
+  // 2. 定期查询附近订单（每10秒）
   useEffect(() => {
     const interval = setInterval(() => {
       if (currentLocation) {
-        websocketService.getNearbyUsers(
-          currentLocation.latitude,
-          currentLocation.longitude,
-          5000 // 5km radius
-        ).then(response => {
-          if (response.success) {
-            setNearbyUsers(response.users);
+        api.get('/orders/nearby', {
+          params: {
+            latitude: currentLocation.latitude,
+            longitude: currentLocation.longitude,
+            radius: searchRadius,
+          }
+        }).then(response => {
+          if (response.data.success) {
+            setNearbyOrders(response.data.orders);
           }
         });
       }
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [currentLocation]);
+  }, [currentLocation, searchRadius]);
 
   return (
     <MapView
@@ -68,16 +71,18 @@ export default function MapScreen() {
         />
       )}
 
-      {/* 附近在线用户 */}
-      {nearbyUsers.map(user => (
+      {/* 附近订单 */}
+      {nearbyOrders.map(order => (
         <Marker
-          key={user.member}
+          key={order.id}
           coordinate={{
-            latitude: user.coordinates.latitude,
-            longitude: user.coordinates.longitude,
+            latitude: order.latitude,
+            longitude: order.longitude,
           }}
-          title={`User ${user.distance.toFixed(0)}m away`}
-          pinColor="green"
+          title={order.title}
+          description={`$${order.rewardAmount} - ${order.distance.toFixed(0)}m away`}
+          pinColor={order.status === 'PENDING' ? 'red' : 'orange'}
+          onCalloutPress={() => navigation.navigate('OrderDetail', { orderId: order.id })}
         />
       ))}
     </MapView>
@@ -121,9 +126,9 @@ npx expo install react-native-maps
 
 ### 预计工作量
 - 基础地图集成：2小时
-- 用户标记显示：1小时
+- 订单marker显示：1小时
 - 实时更新逻辑：1小时
-- 样式优化：1小时
+- 点击跳转订单详情：1小时
 **总计：约5小时**
 
 ---
@@ -458,9 +463,21 @@ WHERE lastLatitude IS NOT NULL AND lastLongitude IS NOT NULL;
 
 **Phase 3-4（当前）：**
 ```sql
--- 仅添加索引优化
+-- Users表索引优化
 CREATE INDEX idx_users_location_updated ON users (lastLocationUpdatedAt);
 CREATE INDEX idx_users_push_enabled ON users (pushNotificationsEnabled);
+
+-- Orders表索引优化（Phase 3新增）
+-- 1. 订单状态索引（查询PENDING订单）
+CREATE INDEX idx_orders_status ON orders (status);
+
+-- 2. PostGIS空间索引（附近订单查询，加速ST_DWithin）
+CREATE INDEX idx_orders_location_geo ON orders
+USING GIST (ST_MakePoint(longitude, latitude))
+WHERE status = 'PENDING';
+
+-- 3. 订单时间索引（按创建时间排序）
+CREATE INDEX idx_orders_created ON orders (createdAt DESC);
 ```
 
 **Phase 5+（用户>10万）：**
@@ -550,25 +567,396 @@ await usersRepository
 
 ---
 
-## 4. 其他待优化项
+## 4. Chat & Live Updates（Phase 5）
 
-### 4.1 推送通知集成（Phase 3优先）
+### 需求
+- 订单级别1对1聊天（requester与helper）
+- 在线状态显示（"对方正在输入..."）
+- 实时订单状态更新通知
+
+### 技术方案：使用Redis TTL判断在线状态
+
+**CRITICAL:** 在线判断必须查询Redis TTL，不是PostgreSQL
+
+```typescript
+// backend/src/chat/chat.gateway.ts
+@WebSocketGateway()
+export class ChatGateway {
+  constructor(
+    private redisService: RedisService,
+    private usersService: UsersService
+  ) {}
+
+  // 检查用户是否在线
+  async isUserOnline(userId: string): Promise<boolean> {
+    // ✅ 正确：查询Redis TTL
+    const ttl = await this.redisService.client.ttl(`user:${userId}:ttl`);
+    return ttl > 0;  // TTL存在且>0表示在线
+
+    // ❌ 错误：不要查PostgreSQL的lastLocationUpdatedAt
+    // PostgreSQL包含所有用户（在线+离线）
+  }
+
+  // 发送在线状态
+  async emitUserStatus(orderId: string) {
+    const order = await this.ordersService.findById(orderId);
+
+    // 检查requester和helper在线状态
+    const requesterOnline = await this.isUserOnline(order.requesterId);
+    const helperOnline = order.helperId
+      ? await this.isUserOnline(order.helperId)
+      : false;
+
+    // 向订单room广播在线状态
+    this.server.to(`order:${orderId}`).emit('user_status', {
+      requester: { online: requesterOnline },
+      helper: { online: helperOnline }
+    });
+  }
+
+  // 处理"正在输入"事件
+  @SubscribeMessage('typing')
+  async handleTyping(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { orderId: string }
+  ) {
+    const userId = client.data.userId;
+
+    // 检查是否在线（防止假typing事件）
+    const isOnline = await this.isUserOnline(userId);
+    if (!isOnline) return;
+
+    // 向订单room广播（排除发送者）
+    client.to(`order:${data.orderId}`).emit('user_typing', {
+      userId,
+      typing: true
+    });
+  }
+}
+```
+
+**在线状态显示示例（Mobile）：**
+```typescript
+// mobile/src/screens/ChatScreen.tsx
+export default function ChatScreen({ orderId }: Props) {
+  const [isOtherUserOnline, setIsOtherUserOnline] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+
+  useEffect(() => {
+    // 监听在线状态
+    websocketService.on('user_status', (data) => {
+      // 根据当前用户角色判断
+      const otherUserOnline = isRequester
+        ? data.helper.online
+        : data.requester.online;
+      setIsOtherUserOnline(otherUserOnline);
+    });
+
+    // 监听"正在输入"
+    websocketService.on('user_typing', (data) => {
+      setIsTyping(data.typing);
+      setTimeout(() => setIsTyping(false), 3000);
+    });
+
+    return () => {
+      websocketService.off('user_status');
+      websocketService.off('user_typing');
+    };
+  }, []);
+
+  return (
+    <View>
+      {/* 在线状态指示 */}
+      <View style={styles.header}>
+        <Text>{otherUserName}</Text>
+        {isOtherUserOnline && (
+          <View style={styles.onlineDot} />
+        )}
+      </View>
+
+      {/* 正在输入指示 */}
+      {isTyping && (
+        <Text style={styles.typingText}>对方正在输入...</Text>
+      )}
+    </View>
+  );
+}
+```
+
+### 为什么必须用Redis TTL而不是PostgreSQL？
+
+| 场景 | Redis TTL | PostgreSQL lastLocationUpdatedAt |
+|------|-----------|----------------------------------|
+| 用户在线（app前台） | ✅ TTL存在 | ✅ 最近更新 |
+| 用户后台（5分钟内） | ❌ TTL过期 | ✅ 最近更新 |
+| 用户关闭app（1小时内） | ❌ TTL过期 | ✅ 最近更新 |
+| 用户关闭app（1天前） | ❌ TTL过期 | ❌ 旧数据 |
+
+**结论：**
+- Redis TTL = 真实在线状态（WebSocket连接+位置更新）
+- PostgreSQL = 最后位置（用于push通知，不代表在线）
+
+### 预计工作量
+- Chat room管理：2小时
+- 在线状态检测（Redis TTL）：1小时
+- 聊天消息存储：3小时
+- 移动端UI：4小时
+**总计：约10小时**
+
+---
+
+## 5. 邮箱验证增强（Email Verification Enhancement）
+
+### 需求
+当前系统允许任意邮箱注册，无验证流程。需要添加邮箱验证确保用户身份真实性。
+
+### 实现方案
+
+#### 后端实现
+
+**1. 修改User Entity**
+```typescript
+// backend/src/users/user.entity.ts
+@Entity('users')
+export class User {
+  // ... existing fields ...
+
+  @Column({ default: false })
+  emailVerified: boolean;
+
+  @Column({ nullable: true })
+  verificationToken: string;
+
+  @Column({ nullable: true })
+  verificationTokenExpiry: Date;
+}
+```
+
+**2. 邮件发送服务**
+```typescript
+// backend/src/mail/mail.service.ts
+import * as nodemailer from 'nodemailer';
+
+@Injectable()
+export class MailService {
+  private transporter;
+
+  constructor() {
+    // 使用Gmail SMTP（或其他邮件服务）
+    this.transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+  }
+
+  async sendVerificationEmail(email: string, token: string) {
+    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
+
+    await this.transporter.sendMail({
+      from: process.env.SMTP_USER,
+      to: email,
+      subject: 'Verify your email - Bounty App',
+      html: `
+        <h2>Welcome to Bounty App!</h2>
+        <p>Please click the link below to verify your email:</p>
+        <a href="${verificationUrl}">${verificationUrl}</a>
+        <p>This link will expire in 24 hours.</p>
+      `,
+    });
+  }
+}
+```
+
+**3. 注册流程修改**
+```typescript
+// backend/src/auth/auth.service.ts
+async register(registerDto: RegisterDto) {
+  // Create user
+  const user = await this.usersRepository.create({
+    ...registerDto,
+    emailVerified: false,
+    verificationToken: crypto.randomBytes(32).toString('hex'),
+    verificationTokenExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+  });
+
+  await this.usersRepository.save(user);
+
+  // Send verification email
+  await this.mailService.sendVerificationEmail(user.email, user.verificationToken);
+
+  return {
+    message: 'Registration successful. Please check your email to verify your account.',
+    user: { id: user.id, email: user.email },
+  };
+}
+
+async verifyEmail(token: string) {
+  const user = await this.usersRepository.findOne({
+    where: { verificationToken: token },
+  });
+
+  if (!user) {
+    throw new BadRequestException('Invalid verification token');
+  }
+
+  if (user.verificationTokenExpiry < new Date()) {
+    throw new BadRequestException('Verification token expired');
+  }
+
+  user.emailVerified = true;
+  user.verificationToken = null;
+  user.verificationTokenExpiry = null;
+
+  await this.usersRepository.save(user);
+
+  return { message: 'Email verified successfully' };
+}
+```
+
+**4. 验证Guard**
+```typescript
+// backend/src/auth/guards/email-verified.guard.ts
+@Injectable()
+export class EmailVerifiedGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest();
+    const user = request.user;
+
+    if (!user.emailVerified) {
+      throw new ForbiddenException('Please verify your email before accessing this resource');
+    }
+
+    return true;
+  }
+}
+
+// 应用到需要验证的endpoint
+@Controller('orders')
+@UseGuards(JwtAuthGuard, EmailVerifiedGuard)
+export class OrdersController {
+  // 只有验证过邮箱的用户可以发布/接受订单
+}
+```
+
+#### 前端实现
+
+**1. 验证页面**
+```typescript
+// mobile/src/screens/VerifyEmailScreen.tsx
+export default function VerifyEmailScreen() {
+  const [email, setEmail] = useState('');
+
+  const resendVerification = async () => {
+    await api.post('/auth/resend-verification', { email });
+    Alert.alert('Success', 'Verification email sent');
+  };
+
+  return (
+    <View>
+      <Text>Please verify your email</Text>
+      <Text>We sent a verification link to {email}</Text>
+      <Button onPress={resendVerification}>Resend Email</Button>
+    </View>
+  );
+}
+```
+
+**2. 验证提醒**
+```typescript
+// mobile/src/screens/HomeScreen.tsx
+useEffect(() => {
+  checkEmailVerification();
+}, []);
+
+const checkEmailVerification = async () => {
+  const user = await api.get('/auth/me');
+  if (!user.data.emailVerified) {
+    Alert.alert(
+      'Email Not Verified',
+      'Please verify your email to access all features',
+      [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Verify Now', onPress: () => navigation.navigate('VerifyEmail') }
+      ]
+    );
+  }
+};
+```
+
+### 邮件服务选择
+
+**选项1: Gmail SMTP（推荐开发测试）**
+- 免费
+- 每天500封限制
+- 需要"应用专用密码"（App Password）
+
+**选项2: SendGrid（推荐生产环境）**
+- 免费tier: 100封/天
+- 专业邮件服务，送达率高
+- API简单易用
+
+**选项3: AWS SES**
+- 便宜，可扩展
+- 需要AWS账号
+
+### 环境变量配置
+
+```env
+# backend/.env
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+FRONTEND_URL=exp://192.168.x.x:8081  # Expo development URL
+```
+
+### 安全考虑
+
+1. **Token安全**
+   - 使用加密随机token（crypto.randomBytes）
+   - 24小时过期时间
+   - 验证后立即删除token
+
+2. **防滥用**
+   - 限制重发验证邮件频率（每5分钟最多1次）
+   - 记录发送日志
+
+3. **隐私保护**
+   - 不在响应中泄露用户是否存在
+   - 验证失败统一返回"Invalid or expired token"
+
+### 预计工作量
+- 后端实现（Entity, Service, Controller）: 3小时
+- 邮件服务集成: 2小时
+- 前端UI: 2小时
+- 测试: 1小时
+**总计：约8小时**
+
+### 实施优先级
+⏳ **Phase 4-5** - 非MVP必需，但建议在公开发布前实施
+
+---
+
+## 6. 其他待优化项
+
+### 6.1 推送通知集成（Phase 3-4优先）
 - [ ] APNs（iOS）集成
 - [ ] FCM（Android）集成
 - [ ] 推送token存储
 - [ ] 订单推送模板
 
-### 4.2 位置精度过滤
+### 6.2 位置精度过滤
 - [ ] 过滤精度>100m的GPS读数
 - [ ] 显示位置精度指示器
 - [ ] 位置精度字段存储
 
-### 4.3 用户偏好设置
+### 5.3 用户偏好设置
 - [ ] 推送距离偏好（1km/2km/5km）
 - [ ] 工作时间偏好
 - [ ] 常用地址（家/公司）
 
-### 4.4 缓存优化
+### 5.4 缓存优化
 - [ ] Redis连接池
 - [ ] 用户信息缓存（减少数据库查询）
 - [ ] WebSocket消息压缩

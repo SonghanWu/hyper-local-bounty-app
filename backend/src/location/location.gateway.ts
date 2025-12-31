@@ -53,6 +53,9 @@ export class LocationGateway
       // Store userId in socket data
       client.data.userId = userId;
 
+      // Join user-specific room for targeted notifications
+      client.join(userId);
+
       console.log(`✅ User ${userId} connected via WebSocket`);
     } catch (error) {
       console.error('WebSocket authentication failed:', error.message);
@@ -179,5 +182,11 @@ export class LocationGateway
       console.error('Failed to get nearby users:', error);
       return { error: 'Failed to get nearby users' };
     }
+  }
+
+  // Send notification to a specific user (for order acceptance)
+  sendOrderAcceptedNotification(userId: string, orderData: any) {
+    this.server.to(userId).emit('order_accepted', orderData);
+    console.log(`📨 Sent order acceptance notification to user ${userId}`);
   }
 }

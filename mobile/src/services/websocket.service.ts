@@ -1,7 +1,8 @@
 import { io, Socket } from 'socket.io-client';
 import * as SecureStore from 'expo-secure-store';
+import { API_BASE_URL } from '../../config/api.config';
 
-const BACKEND_URL = 'http://100.64.13.57:3000'; // Backend server URL
+const BACKEND_URL = API_BASE_URL; // Backend server URL
 
 export interface LocationUpdate {
   latitude: number;
@@ -198,6 +199,28 @@ class WebSocketService {
    */
   getConnectionStatus(): boolean {
     return this.isConnected;
+  }
+
+  /**
+   * Listen to WebSocket events
+   */
+  on(event: string, callback: (data: any) => void) {
+    if (this.socket) {
+      this.socket.on(event, callback);
+    }
+  }
+
+  /**
+   * Remove WebSocket event listener
+   */
+  off(event: string, callback?: (data: any) => void) {
+    if (this.socket) {
+      if (callback) {
+        this.socket.off(event, callback);
+      } else {
+        this.socket.off(event);
+      }
+    }
   }
 }
 

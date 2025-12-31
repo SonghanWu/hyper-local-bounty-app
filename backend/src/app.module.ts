@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { RedisModule } from './redis/redis.module';
 import { LocationModule } from './location/location.module';
+import { OrdersModule } from './orders/orders.module';
 
 @Module({
   imports: [
@@ -24,6 +25,8 @@ import { LocationModule } from './location/location.module';
     UsersModule,
     // Location services
     LocationModule,
+    // Orders
+    OrdersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

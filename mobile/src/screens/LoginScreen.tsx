@@ -26,6 +26,7 @@ export default function LoginScreen({ navigation }: Props) {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
     if (!identifier || !password) {
@@ -33,9 +34,14 @@ export default function LoginScreen({ navigation }: Props) {
       return;
     }
 
+    console.log('=== Login Attempt ===');
+    console.log('Identifier:', identifier);
+    console.log('Password length:', password.length);
+
     setLoading(true);
     try {
       const response = await authApi.login({ identifier, password });
+      console.log('✓ Login successful:', response.user.email);
 
       // Save user info to AsyncStorage (token is already saved by api.ts in SecureStore)
       await AsyncStorage.setItem('user', JSON.stringify(response.user));
@@ -46,6 +52,8 @@ export default function LoginScreen({ navigation }: Props) {
         routes: [{ name: 'Home' }],
       });
     } catch (error: any) {
+      console.log('✗ Login failed:', error.response?.data?.message || error.message);
+      console.log('Error details:', JSON.stringify(error.response?.data, null, 2));
       Alert.alert('Login Failed', error.response?.data?.message || 'Invalid credentials');
     } finally {
       setLoading(false);
@@ -71,13 +79,21 @@ export default function LoginScreen({ navigation }: Props) {
           keyboardType="email-address"
         />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry={true}
-        />
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={styles.passwordInput}
+            placeholder="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+          />
+          <TouchableOpacity
+            style={styles.eyeButton}
+            onPress={() => setShowPassword(!showPassword)}
+          >
+            <Text style={styles.eyeIcon}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+          </TouchableOpacity>
+        </View>
 
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}
@@ -137,6 +153,26 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 16,
     marginBottom: 16,
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 16,
+    fontSize: 16,
+  },
+  eyeButton: {
+    padding: 16,
+  },
+  eyeIcon: {
+    fontSize: 20,
   },
   button: {
     backgroundColor: '#007AFF',

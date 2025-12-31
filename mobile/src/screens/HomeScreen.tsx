@@ -7,6 +7,8 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,11 +16,24 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import websocketService, { NearbyUser } from '../services/websocket.service';
 import locationService, { UserLocation } from '../services/location.service';
+import api from '../services/api';
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
 interface Props {
   navigation: HomeScreenNavigationProp;
+}
+
+interface Order {
+  id: string;
+  title: string;
+  description: string;
+  rewardAmount: number;
+  status: string;
+  latitude: number;
+  longitude: number;
+  distance: number;
+  createdAt: string;
 }
 
 export default function HomeScreen({ navigation }: Props) {
@@ -29,6 +44,14 @@ export default function HomeScreen({ navigation }: Props) {
   const [isLoading, setIsLoading] = useState(false);
   const [userName, setUserName] = useState('');
   const [searchRadius, setSearchRadius] = useState(1000); // Default 1km
+  const [nearbyOrders, setNearbyOrders] = useState<Order[]>([]);
+  const [orderSearchRadius, setOrderSearchRadius] = useState(1000); // Default 1km for orders
+
+  // Post Order Modal state
+  const [showPostOrderModal, setShowPostOrderModal] = useState(false);
+  const [orderTitle, setOrderTitle] = useState('');
+  const [orderDescription, setOrderDescription] = useState('');
+  const [orderReward, setOrderReward] = useState('');
 
   useEffect(() => {
     initializeServices();
@@ -140,6 +163,79 @@ export default function HomeScreen({ navigation }: Props) {
     setIsLoading(false);
   };
 
+  const handleFindNearbyOrders = async () => {
+    if (!currentLocation) {
+      Alert.alert('Error', 'Current location not available');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await api.get('/orders/nearby', {
+        params: {
+          latitude: currentLocation.latitude,
+          longitude: currentLocation.longitude,
+          radius: orderSearchRadius,
+        },
+      });
+
+      if (response.data.success) {
+        setNearbyOrders(response.data.orders);
+        if (response.data.orders.length === 0) {
+          Alert.alert(
+            'No Nearby Orders',
+            `No orders found within ${orderSearchRadius >= 1000 ? orderSearchRadius / 1000 + 'km' : orderSearchRadius + 'm'}`
+          );
+        }
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.message || 'Failed to get nearby orders');
+    }
+    setIsLoading(false);
+  };
+
+  const handlePostOrder = async () => {
+    if (!currentLocation) {
+      Alert.alert('Error', 'Current location not available. Please enable location tracking first.');
+      return;
+    }
+
+    if (!orderTitle.trim() || !orderDescription.trim() || !orderReward.trim()) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    const rewardAmount = parseFloat(orderReward);
+    if (isNaN(rewardAmount) || rewardAmount <= 0) {
+      Alert.alert('Error', 'Please enter a valid reward amount');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await api.post('/orders', {
+        title: orderTitle.trim(),
+        description: orderDescription.trim(),
+        rewardAmount,
+        latitude: currentLocation.latitude,
+        longitude: currentLocation.longitude,
+      });
+
+      if (response.data.success) {
+        Alert.alert('Success', 'Order posted successfully!');
+        setShowPostOrderModal(false);
+        // Clear form
+        setOrderTitle('');
+        setOrderDescription('');
+        setOrderReward('');
+      }
+    } catch (error: any) {
+      console.error('Post order error:', error);
+      Alert.alert('Error', error.response?.data?.message || error.message || 'Failed to post order');
+    }
+    setIsLoading(false);
+  };
+
   const handleLogout = async () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
       { text: 'Cancel', style: 'cancel' },
@@ -200,6 +296,29 @@ export default function HomeScreen({ navigation }: Props) {
           </View>
         </View>
 
+        {/* Post Order Button */}
+        <View style={styles.card}>
+          <TouchableOpacity
+            style={styles.postOrderButton}
+            onPress={() => {
+              console.log('Post Order button clicked');
+              setShowPostOrderModal(true);
+            }}
+            disabled={!isConnected || isLoading}
+          >
+            <Text style={styles.postOrderButtonText}>
+              📝 Post a New Order {!isConnected && '(Disabled - Not Connected)'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.myOrdersButton}
+            onPress={() => navigation.navigate('MyOrders')}
+          >
+            <Text style={styles.myOrdersButtonText}>📋 My Orders</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Current Location */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Current Location</Text>
@@ -254,11 +373,10 @@ export default function HomeScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
 
-        {/* Nearby Users */}
+        {/* Nearby Users - Commented out for future use */}
+        {/*
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Nearby Users</Text>
-
-          {/* Distance Selector */}
           <Text style={styles.sectionLabel}>Search Radius:</Text>
           <View style={styles.radiusButtons}>
             {[500, 1000, 2000, 5000, 10000].map((radius) => (
@@ -281,7 +399,6 @@ export default function HomeScreen({ navigation }: Props) {
               </TouchableOpacity>
             ))}
           </View>
-
           <TouchableOpacity
             style={styles.button}
             onPress={handleFindNearbyUsers}
@@ -289,9 +406,7 @@ export default function HomeScreen({ navigation }: Props) {
           >
             <Text style={styles.buttonText}>Find Nearby Users</Text>
           </TouchableOpacity>
-
           {isLoading && <ActivityIndicator size="small" color="#007AFF" style={styles.loader} />}
-
           {nearbyUsers.length > 0 && (
             <View style={styles.usersList}>
               <Text style={styles.usersCount}>Found {nearbyUsers.length} user(s)</Text>
@@ -311,7 +426,139 @@ export default function HomeScreen({ navigation }: Props) {
             </View>
           )}
         </View>
+        */}
+
+        {/* Nearby Orders */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Nearby Orders</Text>
+          <Text style={styles.sectionLabel}>Search Radius:</Text>
+          <View style={styles.radiusButtons}>
+            {[500, 1000, 2000, 5000, 10000].map((radius) => (
+              <TouchableOpacity
+                key={radius}
+                style={[
+                  styles.radiusButton,
+                  orderSearchRadius === radius && styles.radiusButtonActive,
+                ]}
+                onPress={() => setOrderSearchRadius(radius)}
+              >
+                <Text
+                  style={[
+                    styles.radiusButtonText,
+                    orderSearchRadius === radius && styles.radiusButtonTextActive,
+                  ]}
+                >
+                  {radius >= 1000 ? `${radius / 1000}km` : `${radius}m`}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={handleFindNearbyOrders}
+            disabled={!isConnected || isLoading}
+          >
+            <Text style={styles.buttonText}>Find Nearby Orders</Text>
+          </TouchableOpacity>
+          {isLoading && <ActivityIndicator size="small" color="#007AFF" style={styles.loader} />}
+          {nearbyOrders.length > 0 && (
+            <View style={styles.ordersList}>
+              <Text style={styles.ordersCount}>Found {nearbyOrders.length} order(s)</Text>
+              {nearbyOrders.map((order, index) => (
+                <TouchableOpacity
+                  key={order.id}
+                  style={styles.orderItem}
+                  onPress={() => navigation.navigate('OrderDetail', { orderId: order.id })}
+                >
+                  <View style={styles.orderHeader}>
+                    <Text style={styles.orderNumber}>#{index + 1}</Text>
+                    <Text style={styles.orderDistance}>
+                      {order.distance.toFixed(0)}m away
+                    </Text>
+                  </View>
+                  <Text style={styles.orderTitle}>{order.title}</Text>
+                  <Text style={styles.orderDescription} numberOfLines={2}>
+                    {order.description}
+                  </Text>
+                  <View style={styles.orderFooter}>
+                    <Text style={styles.orderReward}>Reward: ${order.rewardAmount}</Text>
+                    <Text style={styles.orderStatus}>{order.status}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
       </ScrollView>
+
+      {/* Post Order Modal */}
+      <Modal
+        visible={showPostOrderModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowPostOrderModal(false)}
+        onShow={() => console.log('Post Order Modal opened')}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Post a New Order</Text>
+              <TouchableOpacity onPress={() => setShowPostOrderModal(false)}>
+                <Text style={styles.modalCloseButton}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalForm}>
+              <Text style={styles.formLabel}>Title *</Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="e.g., Need a phone charger"
+                value={orderTitle}
+                onChangeText={setOrderTitle}
+                maxLength={100}
+              />
+
+              <Text style={styles.formLabel}>Description *</Text>
+              <TextInput
+                style={[styles.formInput, styles.formTextArea]}
+                placeholder="Describe what you need help with..."
+                value={orderDescription}
+                onChangeText={setOrderDescription}
+                multiline
+                numberOfLines={4}
+                maxLength={500}
+              />
+
+              <Text style={styles.formLabel}>Reward Amount ($) *</Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="e.g., 5"
+                value={orderReward}
+                onChangeText={setOrderReward}
+                keyboardType="decimal-pad"
+              />
+
+              {currentLocation && (
+                <View style={styles.locationInfo}>
+                  <Text style={styles.locationInfoText}>
+                    📍 Order location: {currentLocation.latitude.toFixed(4)}, {currentLocation.longitude.toFixed(4)}
+                  </Text>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={styles.submitButton}
+                onPress={handlePostOrder}
+                disabled={isLoading}
+              >
+                <Text style={styles.submitButtonText}>
+                  {isLoading ? 'Posting...' : 'Post Order'}
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -435,6 +682,198 @@ const styles = StyleSheet.create({
   loader: {
     marginTop: 15,
   },
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 8,
+    marginTop: 5,
+  },
+  radiusButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 15,
+  },
+  radiusButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F0F0F0',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  radiusButtonActive: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  radiusButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#666',
+  },
+  radiusButtonTextActive: {
+    color: '#FFF',
+  },
+  ordersList: {
+    marginTop: 15,
+  },
+  ordersCount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 10,
+  },
+  orderItem: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  orderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  orderNumber: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+  },
+  orderDistance: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FF9500',
+  },
+  orderTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 6,
+  },
+  orderDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 10,
+    lineHeight: 20,
+  },
+  orderFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  orderReward: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+  },
+  orderStatus: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#999',
+    textTransform: 'uppercase',
+  },
+  postOrderButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  postOrderButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  myOrdersButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+  },
+  myOrdersButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    height: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  modalCloseButton: {
+    fontSize: 28,
+    color: '#666',
+    fontWeight: '300',
+  },
+  modalForm: {
+    flexGrow: 1,
+  },
+  formLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+    marginTop: 12,
+  },
+  formInput: {
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: '#F9F9F9',
+  },
+  formTextArea: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  locationInfo: {
+    backgroundColor: '#E3F2FD',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  locationInfoText: {
+    fontSize: 13,
+    color: '#1976D2',
+  },
+  submitButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 20,
+  },
+  submitButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  // Commented out styles for Nearby Users (for future use)
+  /*
   usersList: {
     marginTop: 15,
   },
@@ -505,4 +944,5 @@ const styles = StyleSheet.create({
   radiusButtonTextActive: {
     color: '#FFF',
   },
+  */
 });
