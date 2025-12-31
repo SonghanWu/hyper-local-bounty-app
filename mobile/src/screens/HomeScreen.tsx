@@ -334,6 +334,13 @@ export default function HomeScreen({ navigation }: Props) {
           >
             <Text style={styles.myOrdersButtonText}>📋 My Orders</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.walletButton}
+            onPress={() => navigation.navigate('Wallet')}
+          >
+            <Text style={styles.walletButtonText}>💰 My Wallet</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Current Location */}
@@ -812,6 +819,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   myOrdersButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  walletButton: {
+    backgroundColor: '#FF9800',
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  walletButtonText: {
     color: '#FFF',
     fontSize: 16,
     fontWeight: 'bold',

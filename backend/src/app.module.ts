@@ -8,6 +8,7 @@ import { UsersModule } from './users/users.module';
 import { RedisModule } from './redis/redis.module';
 import { LocationModule } from './location/location.module';
 import { OrdersModule } from './orders/orders.module';
+import { WalletModule } from './wallet/wallet.module';
 
 @Module({
   imports: [
@@ -27,6 +28,8 @@ import { OrdersModule } from './orders/orders.module';
     LocationModule,
     // Orders
     OrdersModule,
+    // Wallet
+    WalletModule,
   ],
   controllers: [AppController],
   providers: [AppService],

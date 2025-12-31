@@ -6,6 +6,7 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { NearbyOrdersDto } from './dto/nearby-orders.dto';
 import { LocationGateway } from '../location/location.gateway';
+import { WalletService } from '../wallet/wallet.service';
 
 @Injectable()
 export class OrdersService {
@@ -14,6 +15,7 @@ export class OrdersService {
     private ordersRepository: Repository<Order>,
     private dataSource: DataSource,
     private locationGateway: LocationGateway,
+    private walletService: WalletService,
   ) {}
 
   async createOrder(
@@ -184,6 +186,25 @@ export class OrdersService {
     if (order.status !== OrderStatus.ACCEPTED) {
       throw new BadRequestException(
         `Order must be ACCEPTED to be completed. Current status: ${order.status}`,
+      );
+    }
+
+    // Transfer reward from requester to helper (10% platform fee)
+    try {
+      const transferResult = await this.walletService.transfer(
+        order.requesterId,
+        order.helperId,
+        order.rewardAmount,
+        order.id,
+        10, // 10% platform fee
+      );
+
+      console.log(
+        `💰 Payment completed for order ${orderId}: ${order.rewardAmount} (${transferResult.netAmount} after fee)`,
+      );
+    } catch (error) {
+      throw new BadRequestException(
+        `Payment failed: ${error.message}. Order cannot be completed.`,
       );
     }
 

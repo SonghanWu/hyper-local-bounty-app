@@ -31,6 +31,10 @@ export class User {
   @Column({ type: 'decimal', precision: 3, scale: 2, default: 0 })
   rating: number;
 
+  // Wallet balance (virtual currency)
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 100 })
+  balance: number;
+
   // Location fields
   @Column({ type: 'decimal', precision: 10, scale: 8, nullable: true })
   lastLatitude: number;
