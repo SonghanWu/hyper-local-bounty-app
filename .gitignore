@@ -40,3 +40,6 @@ redis_data/
 # Temporary files
 *.tmp
 .cache/
+
+# Claude Code project instructions (local only)
+CLAUDE.md

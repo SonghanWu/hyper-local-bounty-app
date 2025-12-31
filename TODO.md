@@ -960,3 +960,245 @@ FRONTEND_URL=exp://192.168.x.x:8081  # Expo development URL
 - [ ] Redis连接池
 - [ ] 用户信息缓存（减少数据库查询）
 - [ ] WebSocket消息压缩
+
+---
+
+## 7. 地理围栏（Geofencing）- 订单距离监控 ✅ 已完成
+
+### 实现状态
+✅ **已于Phase 3实现** - 前端地理围栏方案
+
+### 已实现功能
+当用户（Requester或Helper）距离订单位置超过500米时：
+1. ✅ 发送本地通知提醒用户"您已远离订单位置"
+2. ✅ 显示警告弹窗询问是否取消订单
+3. ✅ 每分钟最多一次提醒（防止spam，即cooldown机制）
+4. ✅ Requester监控：发布订单时自动启动，PENDING/ACCEPTED状态时持续监控
+5. ✅ Helper监控：接受订单时自动启动，ACCEPTED状态时监控
+6. ✅ 自动清理：订单完成/取消时停止监控
+
+### 功能价值
+- ✅ 防止Helper接单后走太远无法完成任务
+- ✅ 提升订单完成率
+- ✅ 保护Requester利益
+
+### 技术实现方案（已采用）
+
+#### 方案1：前端地理围栏（推荐 - 简单）
+
+**实现难度**: ⭐⭐ 中等
+
+**核心逻辑**:
+```typescript
+// mobile/src/services/geofencing.service.ts
+class GeofencingService {
+  private monitoredOrders: Map<string, {
+    latitude: number;
+    longitude: number;
+    maxDistance: number; // 单位：米
+  }> = new Map();
+
+  // 开始监控订单
+  startMonitoring(orderId: string, orderLocation: {lat: number, lng: number}, maxDistance = 500) {
+    this.monitoredOrders.set(orderId, {
+      latitude: orderLocation.lat,
+      longitude: orderLocation.lng,
+      maxDistance,
+    });
+  }
+
+  // 检查位置是否超出范围
+  checkLocation(currentLocation: {latitude: number, longitude: number}) {
+    this.monitoredOrders.forEach((order, orderId) => {
+      const distance = this.calculateDistance(
+        currentLocation.latitude,
+        currentLocation.longitude,
+        order.latitude,
+        order.longitude
+      );
+
+      if (distance > order.maxDistance) {
+        this.triggerWarning(orderId, distance, order.maxDistance);
+      }
+    });
+  }
+
+  // 计算两点距离（Haversine公式）
+  private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371e3; // 地球半径（米）
+    const φ1 = (lat1 * Math.PI) / 180;
+    const φ2 = (lat2 * Math.PI) / 180;
+    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // 返回距离（米）
+  }
+
+  // 触发警告
+  private triggerWarning(orderId: string, currentDistance: number, maxDistance: number) {
+    // 本地通知
+    this.sendLocalNotification(
+      'Distance Alert',
+      `You are ${Math.round(currentDistance)}m away from the order location (max: ${maxDistance}m)`
+    );
+
+    // 可选：通过事件通知UI
+    // EventEmitter.emit('geofence-violated', { orderId, currentDistance, maxDistance });
+  }
+
+  // 发送本地通知
+  private async sendLocalNotification(title: string, body: string) {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') {
+      await Notifications.requestPermissionsAsync();
+    }
+
+    await Notifications.scheduleNotificationAsync({
+      content: { title, body },
+      trigger: null, // 立即触发
+    });
+  }
+
+  // 停止监控
+  stopMonitoring(orderId: string) {
+    this.monitoredOrders.delete(orderId);
+  }
+}
+
+export default new GeofencingService();
+```
+
+**集成到location.service.ts**:
+```typescript
+// 在handleLocationUpdate中添加
+private handleLocationUpdate(location: Location.LocationObject) {
+  // ... 现有代码 ...
+
+  // 检查地理围栏
+  geofencingService.checkLocation({
+    latitude: location.coords.latitude,
+    longitude: location.coords.longitude,
+  });
+}
+```
+
+**在OrderDetailScreen接受订单时启动监控**:
+```typescript
+const handleAcceptOrder = async () => {
+  const response = await api.post(`/orders/${orderId}/accept`);
+  if (response.data.success) {
+    // 启动地理围栏监控
+    geofencingService.startMonitoring(orderId, {
+      lat: order.latitude,
+      lng: order.longitude,
+    }, 500); // 500米警戒距离
+
+    Alert.alert('Success', 'Order accepted! Stay within 500m of the location.');
+  }
+};
+```
+
+**需要的库**:
+```bash
+npx expo install expo-notifications
+```
+
+#### 方案2：后台位置追踪 + 原生地理围栏（复杂）
+
+**实现难度**: ⭐⭐⭐⭐ 较难
+
+需要配置后台位置权限（iOS需要特殊审核）、使用`expo-task-manager`和`expo-location`的后台任务。
+
+**不推荐原因**:
+- iOS后台位置追踪需要App Store审核理由
+- 耗电量高
+- 用户隐私担忧
+- 配置复杂
+
+### 实现步骤（方案1 - 推荐）
+
+#### Step 1: 创建Geofencing Service
+```bash
+touch mobile/src/services/geofencing.service.ts
+```
+
+实现上面的GeofencingService代码
+
+#### Step 2: 安装通知库
+```bash
+cd mobile
+npx expo install expo-notifications
+```
+
+#### Step 3: 配置通知权限
+在`app.json`中添加：
+```json
+{
+  "expo": {
+    "notification": {
+      "icon": "./assets/notification-icon.png"
+    },
+    "ios": {
+      "infoPlist": {
+        "UIBackgroundModes": ["fetch", "remote-notification"]
+      }
+    },
+    "android": {
+      "permissions": ["NOTIFICATIONS"]
+    }
+  }
+}
+```
+
+#### Step 4: 集成到LocationService
+在`location.service.ts`的`handleLocationUpdate`方法中调用`geofencingService.checkLocation()`
+
+#### Step 5: UI集成
+- OrderDetailScreen: 接受订单时调用`startMonitoring()`
+- OrderDetailScreen: 完成/取消订单时调用`stopMonitoring()`
+- 添加"Distance Alert"对话框，询问用户是否取消订单
+
+### 配置选项
+
+可添加到用户设置：
+```typescript
+interface GeofenceSettings {
+  enabled: boolean;            // 是否启用地理围栏
+  alertDistance: number;       // 警报距离（米），默认500
+  autoPromptCancel: boolean;   // 是否自动弹出取消对话框
+  notificationEnabled: boolean; // 是否发送本地通知
+}
+```
+
+### 测试方案
+
+**模拟器测试**:
+1. 在Xcode/Android Studio中使用Location Simulation
+2. 设置模拟路径，让位置从订单附近移动到远处
+3. 验证通知和警告是否触发
+
+**真机测试**:
+1. 接受附近的测试订单
+2. 实际走动超过500米
+3. 观察通知和应用内警告
+
+### 预估工作量
+- GeofencingService实现: 2小时
+- 通知集成: 1小时
+- UI集成（OrderDetailScreen）: 1小时
+- 测试和调试: 1小时
+**总计：约5小时**
+
+### 优先级
+⏳ **Phase 4-5** - Nice to have，非MVP必需功能
+
+### 备注
+- 方案1（前端监控）足够满足需求，且易于实现
+- 只在用户开启Location Tracking时工作（合理限制）
+- 不消耗额外后台电量
+- 用户体验友好

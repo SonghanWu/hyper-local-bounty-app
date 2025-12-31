@@ -16,6 +16,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import websocketService, { NearbyUser } from '../services/websocket.service';
 import locationService, { UserLocation } from '../services/location.service';
+import geofencingService from '../services/geofencing.service';
 import api from '../services/api';
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -78,6 +79,9 @@ export default function HomeScreen({ navigation }: Props) {
 
   const initializeServices = async () => {
     setIsLoading(true);
+
+    // Initialize geofencing notifications
+    await geofencingService.initialize();
 
     // Connect WebSocket
     const connected = await websocketService.connect();
@@ -222,7 +226,20 @@ export default function HomeScreen({ navigation }: Props) {
       });
 
       if (response.data.success) {
-        Alert.alert('Success', 'Order posted successfully!');
+        const createdOrder = response.data.order;
+
+        // Start geofencing monitoring for requester
+        geofencingService.startMonitoring(
+          createdOrder.id,
+          { latitude: createdOrder.latitude, longitude: createdOrder.longitude },
+          createdOrder.title,
+          500 // 500 meters alert distance
+        );
+
+        Alert.alert(
+          'Success',
+          'Order posted! You will be notified if you move more than 500m away from this location.'
+        );
         setShowPostOrderModal(false);
         // Clear form
         setOrderTitle('');

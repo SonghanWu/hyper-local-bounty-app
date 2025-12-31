@@ -122,6 +122,16 @@ This script will:
 - Navigation from order list to detail screen
 - Complete order lifecycle UI flow
 
+**Phase 3.5 ✅ Complete:** Geofencing & Distance Monitoring
+- Automatic distance monitoring for both Requester and Helper
+  - Requester: Monitored when order is PENDING or ACCEPTED (stay near your order!)
+  - Helper: Monitored when order is ACCEPTED (stay near the task location!)
+- Local push notifications when user moves >500m away from order location
+- In-app alert with option to cancel order
+- Cooldown mechanism (1 alert per minute) to prevent notification spam
+- Haversine formula distance calculation
+- Auto-cleanup when order is completed or cancelled
+
 **Phase 4 🚧 Next:** Mock Payment System (Virtual Wallet)
 
 ---

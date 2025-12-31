@@ -17,6 +17,7 @@ import { RootStackParamList } from '../navigation/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
 import websocketService from '../services/websocket.service';
+import geofencingService from '../services/geofencing.service';
 
 type OrderDetailScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -82,7 +83,32 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
     try {
       const response = await api.get(`/orders/${orderId}`);
       if (response.data.success) {
-        setOrder(response.data.order);
+        const orderData = response.data.order;
+        setOrder(orderData);
+
+        // Start geofencing for requester if order is PENDING or ACCEPTED
+        if (currentUserId && orderData.requester.id === currentUserId) {
+          if (orderData.status === 'PENDING' || orderData.status === 'ACCEPTED') {
+            geofencingService.startMonitoring(
+              orderData.id,
+              { latitude: orderData.latitude, longitude: orderData.longitude },
+              orderData.title,
+              500
+            );
+            console.log(`🎯 Started geofencing for requester on order ${orderData.id}`);
+          }
+        }
+
+        // Start geofencing for helper if order is ACCEPTED
+        if (currentUserId && orderData.helper?.id === currentUserId && orderData.status === 'ACCEPTED') {
+          geofencingService.startMonitoring(
+            orderData.id,
+            { latitude: orderData.latitude, longitude: orderData.longitude },
+            orderData.title,
+            500
+          );
+          console.log(`🎯 Started geofencing for helper on order ${orderData.id}`);
+        }
       }
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.message || 'Failed to load order');
@@ -123,7 +149,11 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
           try {
             const response = await api.post(`/orders/${orderId}/accept`);
             if (response.data.success) {
-              Alert.alert('Success', 'Order accepted successfully!');
+              Alert.alert(
+                'Success',
+                'Order accepted! You will be notified if you move more than 500m away from the order location.'
+              );
+              // Reload order detail (which will auto-start geofencing)
               await loadOrderDetail();
             }
           } catch (error: any) {
@@ -153,6 +183,9 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
             try {
               const response = await api.post(`/orders/${orderId}/complete`);
               if (response.data.success) {
+                // Stop geofencing monitoring
+                geofencingService.stopMonitoring(orderId);
+
                 Alert.alert('Success', 'Order marked as completed!');
                 await loadOrderDetail();
               }
@@ -182,6 +215,9 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
           try {
             const response = await api.post(`/orders/${orderId}/cancel`);
             if (response.data.success) {
+              // Stop geofencing monitoring
+              geofencingService.stopMonitoring(orderId);
+
               Alert.alert('Cancelled', 'Order has been cancelled');
               await loadOrderDetail();
             }

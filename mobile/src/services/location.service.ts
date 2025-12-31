@@ -1,5 +1,6 @@
 import * as Location from 'expo-location';
 import websocketService from './websocket.service';
+import geofencingService from './geofencing.service';
 
 export interface UserLocation {
   latitude: number;
@@ -107,6 +108,9 @@ class LocationService {
     const { latitude, longitude, accuracy } = location.coords;
 
     console.log(`📍 Location update: (${latitude.toFixed(6)}, ${longitude.toFixed(6)}), accuracy: ${accuracy?.toFixed(1)}m`);
+
+    // Check geofencing for monitored orders
+    geofencingService.checkLocation({ latitude, longitude });
 
     // Send location to backend via WebSocket
     websocketService.updateLocation(latitude, longitude)
