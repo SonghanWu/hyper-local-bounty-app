@@ -360,7 +360,6 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
           <Text style={styles.sectionTitle}>Requested By</Text>
           <View style={styles.userInfo}>
             <Text style={styles.userName}>{order.requester.name}</Text>
-            <Text style={styles.userEmail}>{order.requester.email}</Text>
           </View>
         </View>
 
@@ -370,7 +369,6 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
             <Text style={styles.sectionTitle}>Accepted By</Text>
             <View style={styles.userInfo}>
               <Text style={styles.userName}>{order.helper.name}</Text>
-              <Text style={styles.userEmail}>{order.helper.email}</Text>
             </View>
           </View>
         )}

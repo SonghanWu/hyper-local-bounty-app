@@ -236,10 +236,7 @@ export default function HomeScreen({ navigation }: Props) {
           500 // 500 meters alert distance
         );
 
-        Alert.alert(
-          'Success',
-          'Order posted! You will be notified if you move more than 500m away from this location.'
-        );
+        Alert.alert('Success', 'Order posted successfully!');
         setShowPostOrderModal(false);
         // Clear form
         setOrderTitle('');

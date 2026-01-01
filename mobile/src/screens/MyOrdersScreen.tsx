@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
 
 type MyOrdersScreenNavigationProp = NativeStackNavigationProp<
@@ -43,14 +44,31 @@ interface Order {
   };
 }
 
+type TabType = 'posted' | 'helping';
+
 export default function MyOrdersScreen({ navigation }: Props) {
   const [myOrders, setMyOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabType>('posted');
 
   useEffect(() => {
+    loadUserId();
     loadMyOrders();
   }, []);
+
+  const loadUserId = async () => {
+    try {
+      const user = await AsyncStorage.getItem('user');
+      if (user) {
+        const userData = JSON.parse(user);
+        setCurrentUserId(userData.id);
+      }
+    } catch (error) {
+      console.error('Failed to load user ID:', error);
+    }
+  };
 
   const loadMyOrders = async () => {
     try {
@@ -64,6 +82,18 @@ export default function MyOrdersScreen({ navigation }: Props) {
     setIsLoading(false);
     setRefreshing(false);
   };
+
+  const getFilteredOrders = () => {
+    if (!currentUserId) return myOrders;
+
+    if (activeTab === 'posted') {
+      return myOrders.filter(order => order.requester.id === currentUserId);
+    } else {
+      return myOrders.filter(order => order.helper?.id === currentUserId);
+    }
+  };
+
+  const filteredOrders = getFilteredOrders();
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -103,21 +133,48 @@ export default function MyOrdersScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        style={styles.container}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
+      <View style={styles.container}>
         <Text style={styles.pageTitle}>My Orders</Text>
 
-        {myOrders.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No orders yet</Text>
-            <Text style={styles.emptySubtext}>Post or accept orders to see them here</Text>
-          </View>
-        ) : (
-          myOrders.map((order) => (
+        {/* Tab Selector */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'posted' && styles.activeTab]}
+            onPress={() => setActiveTab('posted')}
+          >
+            <Text style={[styles.tabText, activeTab === 'posted' && styles.activeTabText]}>
+              📝 Posted ({myOrders.filter(o => o.requester.id === currentUserId).length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'helping' && styles.activeTab]}
+            onPress={() => setActiveTab('helping')}
+          >
+            <Text style={[styles.tabText, activeTab === 'helping' && styles.activeTabText]}>
+              🤝 Helping ({myOrders.filter(o => o.helper?.id === currentUserId).length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView
+          style={styles.scrollView}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
+          {filteredOrders.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>
+                {activeTab === 'posted' ? 'No posted orders yet' : 'No helping orders yet'}
+              </Text>
+              <Text style={styles.emptySubtext}>
+                {activeTab === 'posted'
+                  ? 'Post an order to see it here'
+                  : 'Accept orders to help others'}
+              </Text>
+            </View>
+          ) : (
+            filteredOrders.map((order) => (
             <TouchableOpacity
               key={order.id}
               style={styles.orderCard}
@@ -157,9 +214,10 @@ export default function MyOrdersScreen({ navigation }: Props) {
                 )}
               </View>
             </TouchableOpacity>
-          ))
-        )}
-      </ScrollView>
+            ))
+          )}
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -171,7 +229,36 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
     padding: 16,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#FFF',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 8,
+    padding: 4,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  activeTab: {
+    backgroundColor: '#007AFF',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  activeTabText: {
+    color: '#FFF',
   },
   loadingContainer: {
     flex: 1,

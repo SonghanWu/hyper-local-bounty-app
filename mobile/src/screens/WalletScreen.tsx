@@ -180,7 +180,7 @@ export default function WalletScreen() {
                       ]}
                     >
                       {transaction.toUserId ? '+' : '-'}$
-                      {transaction.amount.toFixed(2)}
+                      {parseFloat(transaction.amount).toFixed(2)}
                     </Text>
                     <Text
                       style={[

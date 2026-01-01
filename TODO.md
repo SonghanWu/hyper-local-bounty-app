@@ -1202,3 +1202,388 @@ interface GeofenceSettings {
 - 只在用户开启Location Tracking时工作（合理限制）
 - 不消耗额外后台电量
 - 用户体验友好
+
+---
+
+## 8. Stripe支付集成 (Real Payment Integration)
+
+### 需求
+- 替代虚拟钱包系统，使用Stripe处理真实支付
+- P2P转账：订单完成时Requester支付给Helper
+- 平台抽成（10%）
+- 保留Transaction表作为支付历史记录
+
+### 技术方案
+
+**Stripe Connect Express Accounts:**
+- Requester作为付款方
+- Helper作为收款方（需要Stripe Express账户）
+- 平台作为应用所有者
+
+### 架构变化
+
+**数据库：**
+- 移除User.balance字段（不再需要虚拟余额）
+- 保留Transaction表记录支付历史
+- 添加User.stripeAccountId（Helper的Stripe账户ID）
+- 添加User.stripeCustomerId（Requester的Stripe客户ID）
+
+**API流程：**
+```
+1. Helper注册 → 创建Stripe Express Account → 保存stripeAccountId
+2. Order完成 → 创建Payment Intent
+   - amount: order.rewardAmount
+   - application_fee_amount: 10%
+   - on_behalf_of: helper.stripeAccountId
+   - transfer_data: { destination: helper.stripeAccountId }
+3. 支付成功 → 记录Transaction
+```
+
+### 实现步骤
+
+#### 1. 安装依赖
+```bash
+cd backend
+npm install stripe @stripe/stripe-js
+```
+
+#### 2. Stripe Service
+```typescript
+// backend/src/payment/stripe.service.ts
+import Stripe from 'stripe';
+
+@Injectable()
+export class StripeService {
+  private stripe: Stripe;
+
+  constructor(private configService: ConfigService) {
+    this.stripe = new Stripe(configService.get('STRIPE_SECRET_KEY'), {
+      apiVersion: '2023-10-16',
+    });
+  }
+
+  // 创建Helper的Express账户
+  async createExpressAccount(userId: string): Promise<string> {
+    const account = await this.stripe.accounts.create({
+      type: 'express',
+      country: 'US',
+      capabilities: {
+        transfers: { requested: true },
+      },
+    });
+    return account.id;
+  }
+
+  // 创建Payment Intent（订单完成时）
+  async createPaymentIntent(
+    amount: number, // 订单金额（分）
+    helperId: string,
+    orderId: string,
+  ): Promise<Stripe.PaymentIntent> {
+    const platformFee = Math.floor(amount * 0.1); // 10% 平台费
+
+    return await this.stripe.paymentIntents.create({
+      amount,
+      currency: 'usd',
+      application_fee_amount: platformFee,
+      transfer_data: {
+        destination: helperId, // Helper的Stripe账户ID
+      },
+      metadata: {
+        orderId,
+      },
+    });
+  }
+
+  // 退款（订单取消时）
+  async refund(paymentIntentId: string): Promise<Stripe.Refund> {
+    return await this.stripe.refunds.create({
+      payment_intent: paymentIntentId,
+    });
+  }
+}
+```
+
+#### 3. 修改OrdersService
+```typescript
+async completeOrder(orderId: string, userId: string): Promise<Order> {
+  // ... 验证逻辑
+
+  // 使用Stripe支付而不是虚拟钱包
+  try {
+    const paymentIntent = await this.stripeService.createPaymentIntent(
+      order.rewardAmount * 100, // 转换为分
+      order.helper.stripeAccountId,
+      order.id,
+    );
+
+    // 记录Transaction（支付历史）
+    await this.transactionRepository.save({
+      fromUserId: order.requesterId,
+      toUserId: order.helperId,
+      amount: order.rewardAmount,
+      type: TransactionType.TRANSFER,
+      status: TransactionStatus.COMPLETED,
+      orderId: order.id,
+      stripePaymentIntentId: paymentIntent.id, // 新字段
+    });
+
+    order.status = OrderStatus.COMPLETED;
+    await this.ordersRepository.save(order);
+
+    return order;
+  } catch (error) {
+    throw new BadRequestException(`Payment failed: ${error.message}`);
+  }
+}
+```
+
+#### 4. Helper Onboarding流程
+```typescript
+// backend/src/payment/payment.controller.ts
+@Post('connect-account')
+@UseGuards(JwtAuthGuard)
+async createConnectAccount(@Request() req) {
+  const userId = req.user.id;
+  const accountId = await this.stripeService.createExpressAccount(userId);
+
+  // 保存到数据库
+  await this.usersService.updateStripeAccount(userId, accountId);
+
+  // 返回onboarding链接
+  const accountLink = await this.stripe.accountLinks.create({
+    account: accountId,
+    refresh_url: 'https://yourdomain.com/stripe/reauth',
+    return_url: 'https://yourdomain.com/stripe/return',
+    type: 'account_onboarding',
+  });
+
+  return { url: accountLink.url };
+}
+```
+
+### 优劣对比
+
+| 方案 | 优点 | 缺点 | 适用场景 |
+|------|------|------|----------|
+| **虚拟钱包** | 开发快速、无需KYC、方便测试 | 不是真钱、无法提现 | MVP、Demo、测试环境 |
+| **Stripe** | 真实交易、用户信任度高 | 开发复杂、Helper需KYC、1-3天审核 | 生产环境、商业运营 |
+
+### 迁移步骤（从虚拟钱包到Stripe）
+
+1. ✅ 保留Transaction表结构
+2. ✅ 添加stripePaymentIntentId字段
+3. ✅ 移除balance相关逻辑
+4. ✅ 实现Stripe Service
+5. ✅ 修改OrdersService.completeOrder()
+6. ✅ 添加Helper onboarding流程
+7. ✅ 前端集成Stripe Elements（支付表单）
+
+### 预估工作量
+- Stripe Service实现: 4小时
+- Helper Onboarding: 3小时
+- 订单支付流程改造: 3小时
+- 前端支付UI: 4小时
+- 测试（Stripe测试模式）: 2小时
+**总计：约16小时（2天）**
+
+### 优先级
+⏳ **Phase 4.2** - 生产环境必需，MVP可暂缓
+
+---
+
+## 9. 内容审查 (Content Moderation)
+
+### 需求
+- 订单标题/描述的敏感词过滤
+- 防止色情、暴力、违法内容
+- 用户举报机制
+- 管理员审核系统
+
+### 技术方案
+
+#### 方案1：第三方API（推荐）
+
+**OpenAI Moderation API:**
+```typescript
+// backend/src/moderation/moderation.service.ts
+import OpenAI from 'openai';
+
+@Injectable()
+export class ModerationService {
+  private openai: OpenAI;
+
+  constructor() {
+    this.openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+
+  async checkContent(text: string): Promise<{
+    flagged: boolean;
+    categories: string[];
+  }> {
+    const response = await this.openai.moderations.create({
+      input: text,
+    });
+
+    const result = response.results[0];
+
+    if (result.flagged) {
+      const flaggedCategories = Object.keys(result.categories).filter(
+        key => result.categories[key]
+      );
+
+      return {
+        flagged: true,
+        categories: flaggedCategories,
+      };
+    }
+
+    return { flagged: false, categories: [] };
+  }
+}
+```
+
+**集成到创建订单:**
+```typescript
+// backend/src/orders/orders.service.ts
+async createOrder(userId: string, dto: CreateOrderDto) {
+  // 审查内容
+  const titleCheck = await this.moderationService.checkContent(dto.title);
+  const descCheck = await this.moderationService.checkContent(dto.description);
+
+  if (titleCheck.flagged || descCheck.flagged) {
+    throw new BadRequestException(
+      `Content violates community guidelines: ${[...titleCheck.categories, ...descCheck.categories].join(', ')}`
+    );
+  }
+
+  // 继续创建订单...
+}
+```
+
+**OpenAI审查类别:**
+- `sexual` - 性内容
+- `hate` - 仇恨言论
+- `harassment` - 骚扰
+- `self-harm` - 自残
+- `sexual/minors` - 未成年人性内容
+- `hate/threatening` - 仇恨威胁
+- `violence/graphic` - 暴力/血腥
+- `violence` - 暴力
+
+#### 方案2：本地敏感词库（补充）
+
+```typescript
+// backend/src/moderation/sensitive-words.ts
+const SENSITIVE_WORDS = [
+  // 中文敏感词
+  '色情', '赌博', '毒品', '枪支',
+  // 英文敏感词
+  'sex', 'drug', 'weapon', 'illegal',
+];
+
+export function containsSensitiveWords(text: string): boolean {
+  const lowerText = text.toLowerCase();
+  return SENSITIVE_WORDS.some(word => lowerText.includes(word));
+}
+```
+
+#### 方案3：用户举报系统
+
+```typescript
+// backend/src/reports/report.entity.ts
+@Entity('reports')
+export class Report {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  reporterId: string; // 举报人
+
+  @Column()
+  reportedOrderId: string; // 被举报的订单
+
+  @Column()
+  reason: string; // 举报原因
+
+  @Column({ default: 'PENDING' })
+  status: 'PENDING' | 'REVIEWED' | 'DISMISSED'; // 审核状态
+
+  @CreateDateColumn()
+  createdAt: Date;
+}
+```
+
+**前端举报按钮:**
+```typescript
+// mobile/src/screens/OrderDetailScreen.tsx
+<Button
+  title="Report this order"
+  onPress={() => {
+    Alert.prompt(
+      'Report Order',
+      'Please provide a reason',
+      (reason) => {
+        api.post('/reports', {
+          orderId: order.id,
+          reason,
+        });
+      }
+    );
+  }}
+/>
+```
+
+### 实现步骤
+
+#### Step 1: 选择方案
+- 推荐：OpenAI Moderation API（免费，准确率高）
+- 备选：本地敏感词库（离线，但准确率较低）
+
+#### Step 2: 安装依赖
+```bash
+npm install openai
+```
+
+#### Step 3: 创建ModerationService
+实现上面的审查逻辑
+
+#### Step 4: 集成到API
+- CreateOrderDto验证时调用审查
+- 返回明确的错误信息给用户
+
+#### Step 5: 添加举报功能
+- 创建Report实体
+- 实现举报API
+- 前端添加举报按钮
+
+#### Step 6: 管理员审核界面（可选）
+- 创建Admin Panel查看举报
+- 允许管理员封禁用户/删除订单
+
+### 成本考虑
+
+**OpenAI Moderation API:**
+- ✅ 完全免费
+- ✅ 无调用次数限制
+- ✅ 支持多语言
+
+**Google Cloud Natural Language API:**
+- 💰 前5000次/月免费
+- 💰 之后$1/1000次
+
+### 预估工作量
+- OpenAI Moderation集成: 2小时
+- 举报系统: 3小时
+- 管理员审核界面: 4小时
+**总计：约9小时（1天）**
+
+### 优先级
+⚠️ **Phase 3.6** - 重要，防止违规内容
+
+### 备注
+- OpenAI Moderation API响应速度快（<1秒）
+- 可以在订单创建时同步调用
+- 建议记录所有审查结果到数据库，方便分析

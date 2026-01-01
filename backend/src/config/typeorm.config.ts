@@ -9,7 +9,7 @@ export const typeOrmConfig: DataSourceOptions = {
   database: process.env.DB_DATABASE || 'bounty_db',
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
-  synchronize: process.env.NODE_ENV === 'development',
+  synchronize: false, // Disabled to prevent data loss - use migrations instead
   logging: process.env.NODE_ENV === 'development',
 };
 
