@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🧪 Running all Phase 2 tests..."
+echo "🧪 Running all tests..."
 echo "=================================="
 echo ""
 
@@ -43,6 +43,42 @@ if [ $? -eq 0 ]; then
   echo -e "${GREEN}✅ Test 3 PASSED${NC}\n"
 else
   echo -e "${RED}❌ Test 3 FAILED${NC}\n"
+  FAILED=$((FAILED + 1))
+fi
+
+sleep 2
+
+# Test 4: Phase 3 Orders
+echo -e "${YELLOW}Test 4: Phase 3 - Order CRUD and lifecycle${NC}"
+node tests/test-phase3-orders.js
+if [ $? -eq 0 ]; then
+  echo -e "${GREEN}✅ Test 4 PASSED${NC}\n"
+else
+  echo -e "${RED}❌ Test 4 FAILED${NC}\n"
+  FAILED=$((FAILED + 1))
+fi
+
+sleep 2
+
+# Test 5: Wallet System
+echo -e "${YELLOW}Test 5: Phase 4 - Virtual Wallet System${NC}"
+node tests/test-wallet-system.js
+if [ $? -eq 0 ]; then
+  echo -e "${GREEN}✅ Test 5 PASSED${NC}\n"
+else
+  echo -e "${RED}❌ Test 5 FAILED${NC}\n"
+  FAILED=$((FAILED + 1))
+fi
+
+sleep 2
+
+# Test 6: User Profile
+echo -e "${YELLOW}Test 6: User Profile Update${NC}"
+node tests/test-user-profile.js
+if [ $? -eq 0 ]; then
+  echo -e "${GREEN}✅ Test 6 PASSED${NC}\n"
+else
+  echo -e "${RED}❌ Test 6 FAILED${NC}\n"
   FAILED=$((FAILED + 1))
 fi
 

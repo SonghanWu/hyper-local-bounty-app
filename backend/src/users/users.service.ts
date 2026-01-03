@@ -46,4 +46,9 @@ export class UsersService {
       pushNotificationsEnabled: enabled,
     });
   }
+
+  async update(userId: string, updateData: Partial<User>): Promise<User> {
+    await this.usersRepository.update(userId, updateData);
+    return this.findById(userId);
+  }
 }

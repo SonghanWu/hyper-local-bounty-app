@@ -22,6 +22,14 @@ export class OrdersService {
     userId: string,
     createOrderDto: CreateOrderDto,
   ): Promise<Order> {
+    // Check if user has sufficient balance to post this order
+    const userBalance = await this.walletService.getBalance(userId);
+    if (userBalance < createOrderDto.rewardAmount) {
+      throw new BadRequestException(
+        `Insufficient balance to post this order. Required: $${createOrderDto.rewardAmount}, Available: $${userBalance}`,
+      );
+    }
+
     const order = this.ordersRepository.create({
       ...createOrderDto,
       requesterId: userId,
@@ -96,6 +104,7 @@ export class OrdersService {
   async findOrdersByUser(userId: string): Promise<Order[]> {
     return await this.ordersRepository.find({
       where: [{ requesterId: userId }, { helperId: userId }],
+      relations: ['requester', 'helper'],
       order: { createdAt: 'DESC' },
     });
   }

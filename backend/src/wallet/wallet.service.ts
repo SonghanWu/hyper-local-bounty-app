@@ -61,9 +61,12 @@ export class WalletService {
     orderId?: string,
     platformFeePercentage: number = 10,
   ): Promise<{ success: boolean; transactionId: string; netAmount: number }> {
+    // Convert amount to number (TypeORM decimal may return string)
+    const numericAmount = parseFloat(amount.toString());
+
     // Validate inputs
-    if (amount <= 0) {
-      throw new BadRequestException('Transfer amount must be positive');
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      throw new BadRequestException('Transfer amount must be a positive number');
     }
 
     if (platformFeePercentage < 0 || platformFeePercentage > 100) {
@@ -71,8 +74,8 @@ export class WalletService {
     }
 
     // Calculate platform fee and net amount
-    const platformFee = (amount * platformFeePercentage) / 100;
-    const netAmount = amount - platformFee;
+    const platformFee = (numericAmount * platformFeePercentage) / 100;
+    const netAmount = numericAmount - platformFee;
 
     // Use database transaction to ensure atomicity
     const queryRunner = this.dataSource.createQueryRunner();
@@ -108,6 +111,10 @@ export class WalletService {
       }
 
       // 3. Create main transaction record (PENDING)
+      const description = platformFee > 0
+        ? `Transfer: $${numericAmount.toFixed(2)} (Platform fee: $${platformFee.toFixed(2)}, Net: $${netAmount.toFixed(2)})`
+        : `Transfer: $${netAmount.toFixed(2)}`;
+
       const transaction = queryRunner.manager.create(Transaction, {
         fromUserId: fromUserId,
         toUserId: toUserId,
@@ -115,12 +122,12 @@ export class WalletService {
         type: TransactionType.TRANSFER,
         status: TransactionStatus.PENDING,
         orderId,
-        description: `Transfer from ${sender.name} to ${receiver.name}`,
+        description,
       });
       await queryRunner.manager.save(Transaction, transaction);
 
       // 4. Update balances
-      const newSenderBalance = senderBalance - amount;
+      const newSenderBalance = senderBalance - numericAmount;
       const newReceiverBalance = parseFloat(receiver.balance.toString()) + netAmount;
 
       sender.balance = newSenderBalance as any;
@@ -151,7 +158,7 @@ export class WalletService {
       await queryRunner.commitTransaction();
 
       console.log(
-        `✅ Transfer completed: ${sender.name} -> ${receiver.name}, Amount: ${amount} (Net: ${netAmount}, Fee: ${platformFee})`,
+        `✅ Transfer completed: ${sender.name} -> ${receiver.name}, Amount: ${numericAmount} (Net: ${netAmount}, Fee: ${platformFee})`,
       );
 
       return {

@@ -7,9 +7,17 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../navigation/types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
+import { formatRelativeTime } from '../utils/dateFormatter';
+
+type WalletScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 interface Transaction {
   id: string;
@@ -20,19 +28,35 @@ interface Transaction {
   status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
   description: string;
   createdAt: string;
+  orderId?: string;
   fromUser?: { name: string };
   toUser?: { name: string };
 }
 
 export default function WalletScreen() {
+  const navigation = useNavigation<WalletScreenNavigationProp>();
   const [balance, setBalance] = useState<number>(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
+    loadCurrentUser();
     loadWalletData();
   }, []);
+
+  const loadCurrentUser = async () => {
+    try {
+      const user = await AsyncStorage.getItem('user');
+      if (user) {
+        const userData = JSON.parse(user);
+        setCurrentUserId(userData.id);
+      }
+    } catch (error) {
+      console.error('Failed to load user ID:', error);
+    }
+  };
 
   const loadWalletData = async () => {
     try {
@@ -49,7 +73,11 @@ export default function WalletScreen() {
       }
 
       if (transactionsResponse.data.success) {
-        setTransactions(transactionsResponse.data.transactions);
+        // Filter out any invalid transactions and platform fees (internal records)
+        const validTransactions = (transactionsResponse.data.transactions || []).filter(
+          (t: any) => t && t.id && t.type !== 'PLATFORM_FEE'
+        );
+        setTransactions(validTransactions);
       }
     } catch (error: any) {
       console.error('Failed to load wallet data:', error);
@@ -102,24 +130,28 @@ export default function WalletScreen() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
+  /**
+   * Get display amount for transaction
+   * For sender: show total amount (including fee)
+   * For receiver: show net amount (after fee)
+   */
+  const getDisplayAmount = (transaction: Transaction): number => {
+    const netAmount = parseFloat(transaction.amount.toString());
 
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
+    // If current user is the sender
+    if (transaction.fromUserId === currentUserId) {
+      // Try to extract total amount from description
+      // Format: "Transfer: $10.00 (Platform fee: $1.00, Net: $9.00)"
+      const match = transaction.description?.match(/Transfer: \$(\d+\.?\d*)/);
+      if (match && match[1]) {
+        return parseFloat(match[1]);
+      }
+      // Fallback to net amount if description doesn't have total
+      return netAmount;
+    }
 
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
-    });
+    // If current user is the receiver, show net amount
+    return netAmount;
   };
 
   if (isLoading && !isRefreshing) {
@@ -156,46 +188,69 @@ export default function WalletScreen() {
               </Text>
             </View>
           ) : (
-            transactions.map((transaction) => (
-              <View key={transaction.id} style={styles.transactionCard}>
-                <View style={styles.transactionHeader}>
-                  <View style={styles.transactionIconContainer}>
-                    <Text style={styles.transactionIcon}>
-                      {getTransactionIcon(transaction.type)}
-                    </Text>
+            transactions
+              .filter((transaction) => transaction && transaction.id)
+              .map((transaction) => {
+                const hasOrder = transaction.orderId;
+                const CardComponent = hasOrder ? TouchableOpacity : View;
+
+                return (
+                  <CardComponent
+                    key={transaction.id}
+                    style={styles.transactionCard}
+                    onPress={
+                      hasOrder
+                        ? () => navigation.navigate('OrderDetail', { orderId: transaction.orderId! })
+                        : undefined
+                    }
+                  >
+                    <View style={styles.transactionHeader}>
+                    <View style={styles.transactionIconContainer}>
+                      <Text style={styles.transactionIcon}>
+                        {getTransactionIcon(transaction.type)}
+                      </Text>
+                    </View>
+                    <View style={styles.transactionInfo}>
+                      <Text style={styles.transactionDescription}>
+                        {transaction.description || transaction.type}
+                      </Text>
+                      <Text style={styles.transactionDate}>
+                        {transaction.createdAt ? formatRelativeTime(transaction.createdAt) : 'Unknown'}
+                      </Text>
+                    </View>
+                    <View style={styles.transactionAmountContainer}>
+                      <Text
+                        style={[
+                          styles.transactionAmount,
+                          {
+                            color:
+                              transaction.toUserId === currentUserId
+                                ? '#4CAF50' // Green for incoming
+                                : '#F44336', // Red for outgoing
+                          },
+                        ]}
+                      >
+                        {transaction.toUserId === currentUserId ? '+' : '-'}$
+                        {getDisplayAmount(transaction).toFixed(2)}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.transactionStatus,
+                          transaction.status === 'COMPLETED' && styles.statusCompleted,
+                          transaction.status === 'PENDING' && styles.statusPending,
+                          transaction.status === 'FAILED' && styles.statusFailed,
+                        ]}
+                      >
+                        {transaction.status || 'UNKNOWN'}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.transactionInfo}>
-                    <Text style={styles.transactionDescription}>
-                      {transaction.description || transaction.type}
-                    </Text>
-                    <Text style={styles.transactionDate}>
-                      {formatDate(transaction.createdAt)}
-                    </Text>
-                  </View>
-                  <View style={styles.transactionAmountContainer}>
-                    <Text
-                      style={[
-                        styles.transactionAmount,
-                        { color: getTransactionColor(transaction.type) },
-                      ]}
-                    >
-                      {transaction.toUserId ? '+' : '-'}$
-                      {parseFloat(transaction.amount).toFixed(2)}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.transactionStatus,
-                        transaction.status === 'COMPLETED' && styles.statusCompleted,
-                        transaction.status === 'PENDING' && styles.statusPending,
-                        transaction.status === 'FAILED' && styles.statusFailed,
-                      ]}
-                    >
-                      {transaction.status}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            ))
+                  {hasOrder && (
+                    <Text style={styles.viewOrderText}>View Order →</Text>
+                  )}
+                </CardComponent>
+              );
+            })
           )}
         </View>
       </ScrollView>
@@ -330,5 +385,11 @@ const styles = StyleSheet.create({
   statusFailed: {
     backgroundColor: '#FFEBEE',
     color: '#F44336',
+  },
+  viewOrderText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#007AFF',
+    textAlign: 'center',
   },
 });

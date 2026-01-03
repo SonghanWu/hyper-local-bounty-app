@@ -23,6 +23,8 @@ interface LocationUpdatePayload {
     origin: true,
     credentials: true,
   },
+  pingTimeout: 60000,      // 60 seconds - client must respond to ping within this time
+  pingInterval: 25000,     // 25 seconds - send ping every 25 seconds
 })
 export class LocationGateway
   implements OnGatewayConnection, OnGatewayDisconnect

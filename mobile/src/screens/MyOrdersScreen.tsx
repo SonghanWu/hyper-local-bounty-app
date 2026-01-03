@@ -13,6 +13,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
+import { formatDateTime } from '../utils/dateFormatter';
 
 type MyOrdersScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -87,7 +88,7 @@ export default function MyOrdersScreen({ navigation }: Props) {
     if (!currentUserId) return myOrders;
 
     if (activeTab === 'posted') {
-      return myOrders.filter(order => order.requester.id === currentUserId);
+      return myOrders.filter(order => order.requester?.id === currentUserId);
     } else {
       return myOrders.filter(order => order.helper?.id === currentUserId);
     }
@@ -115,11 +116,6 @@ export default function MyOrdersScreen({ navigation }: Props) {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
   if (isLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -143,7 +139,7 @@ export default function MyOrdersScreen({ navigation }: Props) {
             onPress={() => setActiveTab('posted')}
           >
             <Text style={[styles.tabText, activeTab === 'posted' && styles.activeTabText]}>
-              📝 Posted ({myOrders.filter(o => o.requester.id === currentUserId).length})
+              📝 Posted ({currentUserId ? myOrders.filter(o => o.requester?.id === currentUserId).length : 0})
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -151,7 +147,7 @@ export default function MyOrdersScreen({ navigation }: Props) {
             onPress={() => setActiveTab('helping')}
           >
             <Text style={[styles.tabText, activeTab === 'helping' && styles.activeTabText]}>
-              🤝 Helping ({myOrders.filter(o => o.helper?.id === currentUserId).length})
+              🤝 Helping ({currentUserId ? myOrders.filter(o => o.helper?.id === currentUserId).length : 0})
             </Text>
           </TouchableOpacity>
         </View>
@@ -198,18 +194,18 @@ export default function MyOrdersScreen({ navigation }: Props) {
 
               <View style={styles.orderFooter}>
                 <Text style={styles.rewardText}>${order.rewardAmount}</Text>
-                <Text style={styles.dateText}>{formatDate(order.createdAt)}</Text>
+                <Text style={styles.dateText}>{formatDateTime(order.createdAt)}</Text>
               </View>
 
               <View style={styles.roleInfo}>
-                {order.requester && (
-                  <Text style={styles.roleText}>
-                    👤 Requester: {order.requester.name}
-                  </Text>
-                )}
-                {order.helper && (
+                {activeTab === 'posted' && order.helper && (
                   <Text style={styles.roleText}>
                     🤝 Helper: {order.helper.name}
+                  </Text>
+                )}
+                {activeTab === 'helping' && order.requester && (
+                  <Text style={styles.roleText}>
+                    👤 Requester: {order.requester.name}
                   </Text>
                 )}
               </View>
@@ -275,6 +271,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 20,
+    marginHorizontal: 16,
   },
   emptyContainer: {
     flex: 1,

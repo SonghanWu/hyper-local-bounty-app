@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsNotEmpty, Min, Max } from 'class-validator';
+import { IsString, IsNumber, IsNotEmpty, IsOptional, Min, Max } from 'class-validator';
 
 export class CreateOrderDto {
   @IsString()
@@ -6,8 +6,8 @@ export class CreateOrderDto {
   title: string;
 
   @IsString()
-  @IsNotEmpty()
-  description: string;
+  @IsOptional()
+  description?: string;
 
   @IsNumber()
   @Min(0.01)

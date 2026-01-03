@@ -18,6 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
 import websocketService from '../services/websocket.service';
 import geofencingService from '../services/geofencing.service';
+import { formatDateTime } from '../utils/dateFormatter';
 
 type OrderDetailScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -149,10 +150,7 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
           try {
             const response = await api.post(`/orders/${orderId}/accept`);
             if (response.data.success) {
-              Alert.alert(
-                'Success',
-                'Order accepted! You will be notified if you move more than 500m away from the order location.'
-              );
+              Alert.alert('Success', 'Order accepted successfully!');
               // Reload order detail (which will auto-start geofencing)
               await loadOrderDetail();
             }
@@ -377,16 +375,16 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Timeline</Text>
           <Text style={styles.timestamp}>
-            Created: {new Date(order.createdAt).toLocaleString()}
+            Created: {formatDateTime(order.createdAt)}
           </Text>
           {order.acceptedAt && (
             <Text style={styles.timestamp}>
-              Accepted: {new Date(order.acceptedAt).toLocaleString()}
+              Accepted: {formatDateTime(order.acceptedAt)}
             </Text>
           )}
           {order.completedAt && (
             <Text style={styles.timestamp}>
-              Completed: {new Date(order.completedAt).toLocaleString()}
+              Completed: {formatDateTime(order.completedAt)}
             </Text>
           )}
         </View>

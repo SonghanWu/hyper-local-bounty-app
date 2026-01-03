@@ -7,6 +7,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import OrderDetailScreen from './src/screens/OrderDetailScreen';
 import MyOrdersScreen from './src/screens/MyOrdersScreen';
 import WalletScreen from './src/screens/WalletScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 import { RootStackParamList } from './src/navigation/types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -65,6 +66,13 @@ export default function App() {
           component={WalletScreen}
           options={{
             title: 'My Wallet',
+          }}
+        />
+        <Stack.Screen
+          name="Profile"
+          component={ProfileScreen}
+          options={{
+            title: 'Profile Settings',
           }}
         />
       </Stack.Navigator>

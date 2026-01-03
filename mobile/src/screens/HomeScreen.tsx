@@ -204,8 +204,8 @@ export default function HomeScreen({ navigation }: Props) {
       return;
     }
 
-    if (!orderTitle.trim() || !orderDescription.trim() || !orderReward.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
+    if (!orderTitle.trim() || !orderReward.trim()) {
+      Alert.alert('Error', 'Please fill in title and reward amount');
       return;
     }
 
@@ -245,7 +245,14 @@ export default function HomeScreen({ navigation }: Props) {
       }
     } catch (error: any) {
       console.error('Post order error:', error);
-      Alert.alert('Error', error.response?.data?.message || error.message || 'Failed to post order');
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to post order';
+
+      // Use friendlier title for insufficient balance
+      if (errorMessage.includes('Insufficient balance')) {
+        Alert.alert('Insufficient Balance', errorMessage);
+      } else {
+        Alert.alert('Error', errorMessage);
+      }
     }
     setIsLoading(false);
   };
@@ -337,6 +344,13 @@ export default function HomeScreen({ navigation }: Props) {
             onPress={() => navigation.navigate('Wallet')}
           >
             <Text style={styles.walletButtonText}>💰 My Wallet</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={() => navigation.navigate('Profile')}
+          >
+            <Text style={styles.profileButtonText}>⚙️ Profile</Text>
           </TouchableOpacity>
         </View>
 
@@ -539,7 +553,7 @@ export default function HomeScreen({ navigation }: Props) {
                 maxLength={100}
               />
 
-              <Text style={styles.formLabel}>Description *</Text>
+              <Text style={styles.formLabel}>Description (Optional)</Text>
               <TextInput
                 style={[styles.formInput, styles.formTextArea]}
                 placeholder="Describe what you need help with..."
@@ -828,6 +842,18 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   walletButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  profileButton: {
+    backgroundColor: '#9C27B0',
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  profileButtonText: {
     color: '#FFF',
     fontSize: 16,
     fontWeight: 'bold',

@@ -5,4 +5,5 @@ export type RootStackParamList = {
   OrderDetail: { orderId: string };
   MyOrders: undefined;
   Wallet: undefined;
+  Profile: undefined;
 };
