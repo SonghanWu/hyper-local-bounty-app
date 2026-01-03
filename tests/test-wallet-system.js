@@ -19,17 +19,22 @@ let bobToken = '';
 let aliceId = '';
 let bobId = '';
 
+// Generate unique identifiers
+const timestamp = Date.now();
+
 // Test users
 const alice = {
-  email: `alice_wallet_${Date.now()}@test.com`,
-  password: 'password123',
+  email: `alice_wallet_${timestamp}@test.com`,
+  password: 'Password123',
   name: 'Alice Wallet',
+  phone: `+1${timestamp.toString().slice(-10)}`,
 };
 
 const bob = {
-  email: `bob_wallet_${Date.now()}@test.com`,
-  password: 'password123',
+  email: `bob_wallet_${timestamp + 1}@test.com`,
+  password: 'Password123',
   name: 'Bob Wallet',
+  phone: `+1${(timestamp + 1).toString().slice(-10)}`,
 };
 
 async function registerUser(user) {
@@ -38,7 +43,7 @@ async function registerUser(user) {
 }
 
 async function loginUser(email, password) {
-  const response = await axios.post(`${BASE_URL}/auth/login`, { email, password });
+  const response = await axios.post(`${BASE_URL}/auth/login`, { identifier: email, password });
   return response.data;
 }
 

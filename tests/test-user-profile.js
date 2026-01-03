@@ -16,10 +16,13 @@ const BASE_URL = 'http://localhost:3000';
 let userToken = '';
 let userId = '';
 
+const timestamp = Date.now();
+
 const testUser = {
-  email: `profile_test_${Date.now()}@test.com`,
-  password: 'oldpassword123',
+  email: `profile_test_${timestamp}@test.com`,
+  password: 'OldPassword123',
   name: 'Original Name',
+  phone: `+1${timestamp.toString().slice(-10)}`,
 };
 
 async function registerUser(user) {
@@ -28,7 +31,7 @@ async function registerUser(user) {
 }
 
 async function loginUser(email, password) {
-  const response = await axios.post(`${BASE_URL}/auth/login`, { email, password });
+  const response = await axios.post(`${BASE_URL}/auth/login`, { identifier: email, password });
   return response.data;
 }
 
@@ -104,15 +107,15 @@ async function runTests() {
     console.log('Test 3: Update password with correct current password');
     try {
       const passwordUpdate = await updateProfile(userToken, {
-        currentPassword: 'oldpassword123',
-        newPassword: 'newpassword123',
+        currentPassword: 'OldPassword123',
+        newPassword: 'NewPassword123',
       });
 
       if (passwordUpdate.success) {
         console.log('✅ Password updated successfully');
 
         // Try logging in with new password
-        const newLogin = await loginUser(testUser.email, 'newpassword123');
+        const newLogin = await loginUser(testUser.email, 'NewPassword123');
         if (newLogin.token) {
           console.log('✅ Login with new password successful');
           userToken = newLogin.token; // Update token
@@ -129,8 +132,8 @@ async function runTests() {
     console.log('Test 4: Update password fails with wrong current password');
     try {
       await updateProfile(userToken, {
-        currentPassword: 'wrongpassword',
-        newPassword: 'anothernewpassword',
+        currentPassword: 'WrongPassword123',
+        newPassword: 'AnotherNewPassword123',
       });
       console.log('❌ Password updated despite wrong current password');
     } catch (error) {

@@ -35,25 +35,30 @@ async function setup() {
   log('Setting up test users...', 'blue');
 
   try {
+    const timestamp = Date.now();
+
     // Register requester
-    const requesterEmail = `requester_${Date.now()}@test.com`;
+    const requesterEmail = `requester_${timestamp}@test.com`;
     const requesterRes = await axios.post(`${API_URL}/auth/register`, {
       email: requesterEmail,
       password: 'Test1234',
       name: 'Test Requester',
-      phone: '+1234567890',
+      phone: `+1${timestamp.toString().slice(-10)}`,
     });
     requesterToken = requesterRes.data.token;
     requesterUserId = requesterRes.data.user.id;
     log(`✓ Requester registered: ${requesterEmail}`, 'green');
 
+    await sleep(100); // Small delay to ensure different timestamp
+    const timestamp2 = Date.now();
+
     // Register helper
-    const helperEmail = `helper_${Date.now()}@test.com`;
+    const helperEmail = `helper_${timestamp2}@test.com`;
     const helperRes = await axios.post(`${API_URL}/auth/register`, {
       email: helperEmail,
       password: 'Test1234',
       name: 'Test Helper',
-      phone: '+1234567891',
+      phone: `+1${timestamp2.toString().slice(-10)}`,
     });
     helperToken = helperRes.data.token;
     helperUserId = helperRes.data.user.id;
