@@ -7,6 +7,7 @@ import { UpdateOrderDto } from './dto/update-order.dto';
 import { NearbyOrdersDto } from './dto/nearby-orders.dto';
 import { LocationGateway } from '../location/location.gateway';
 import { WalletService } from '../wallet/wallet.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class OrdersService {
@@ -16,6 +17,7 @@ export class OrdersService {
     private dataSource: DataSource,
     private locationGateway: LocationGateway,
     private walletService: WalletService,
+    private notificationsService: NotificationsService,
   ) {}
 
   async createOrder(
@@ -36,7 +38,26 @@ export class OrdersService {
       status: OrderStatus.PENDING,
     });
 
-    return await this.ordersRepository.save(order);
+    const savedOrder = await this.ordersRepository.save(order);
+
+    // Send push notifications to nearby users (async, non-blocking)
+    this.notificationsService
+      .sendNewOrderNotification(
+        savedOrder.id,
+        savedOrder.title,
+        savedOrder.rewardAmount,
+        {
+          latitude: savedOrder.latitude,
+          longitude: savedOrder.longitude,
+        },
+        userId, // Don't notify the requester
+      )
+      .catch((error) => {
+        console.error('Failed to send new order notifications:', error);
+        // Don't throw error - notification failure shouldn't block order creation
+      });
+
+    return savedOrder;
   }
 
   async findNearbyOrders(

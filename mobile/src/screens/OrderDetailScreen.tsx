@@ -240,8 +240,8 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
   };
 
   const handleEditOrder = async () => {
-    if (!editTitle.trim() || !editDescription.trim() || !editReward.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
+    if (!editTitle.trim() || !editReward.trim()) {
+      Alert.alert('Error', 'Please fill in title and reward amount');
       return;
     }
 
@@ -255,7 +255,7 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
     try {
       const response = await api.put(`/orders/${orderId}`, {
         title: editTitle.trim(),
-        description: editDescription.trim(),
+        description: editDescription.trim() || '', // Description is optional
         rewardAmount,
       });
 
@@ -467,10 +467,10 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
                 maxLength={100}
               />
 
-              <Text style={styles.formLabel}>Description *</Text>
+              <Text style={styles.formLabel}>Description (Optional)</Text>
               <TextInput
                 style={[styles.formInput, styles.formTextArea]}
-                placeholder="Order description"
+                placeholder="Order description (optional)"
                 value={editDescription}
                 onChangeText={setEditDescription}
                 multiline

@@ -53,6 +53,14 @@ export class User {
   @Column({ default: true })
   pushNotificationsEnabled: boolean;
 
+  // Expo push token for mobile notifications
+  @Column({ nullable: true })
+  expoPushToken: string;
+
+  // Push notification radius in meters (500m, 1km, 2km, 5km)
+  @Column({ type: 'int', default: 2000 })
+  notificationRadius: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

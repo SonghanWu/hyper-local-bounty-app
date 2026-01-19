@@ -5,9 +5,15 @@ import { OrdersService } from './orders.service';
 import { Order } from './order.entity';
 import { LocationModule } from '../location/location.module';
 import { WalletModule } from '../wallet/wallet.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Order]), LocationModule, WalletModule],
+  imports: [
+    TypeOrmModule.forFeature([Order]),
+    LocationModule,
+    WalletModule,
+    NotificationsModule,
+  ],
   controllers: [OrdersController],
   providers: [OrdersService],
   exports: [OrdersService],

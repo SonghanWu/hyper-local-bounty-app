@@ -1,12 +1,19 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "Hyper Local Bounty",
+    "slug": "hyper-local-bounty-app",
     "version": "1.0.0",
+    "description": "Location-based bounty app where users can post and accept nearby tasks for rewards.",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -16,7 +23,10 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app needs your location to show nearby bounties and users.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs your location to update your position and show nearby bounties."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs your location to update your position and show nearby bounties.",
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -28,11 +38,24 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
-      ]
+        "ACCESS_FINE_LOCATION",
+        "POST_NOTIFICATIONS"
+      ],
+      "googleServicesFile": "./google-services.json",
+      "useNextNotificationsApi": true
+    },
+    "notification": {
+      "icon": "./assets/icon.png",
+      "color": "#007AFF"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "39a8b3f1-e10b-46fb-8d14-72cf5fca1b8b"
+      }
+    },
+    "owner": "mason_wu"
   }
 }

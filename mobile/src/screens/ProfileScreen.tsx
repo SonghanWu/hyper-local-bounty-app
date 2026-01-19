@@ -18,6 +18,7 @@ export default function ProfileScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [notificationRadius, setNotificationRadius] = useState(2000);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -33,6 +34,7 @@ export default function ProfileScreen() {
         const user = response.data.user;
         setName(user.name);
         setEmail(user.email);
+        setNotificationRadius(user.notificationRadius || 2000);
       }
     } catch (error: any) {
       console.error('Failed to load profile:', error);
@@ -69,6 +71,7 @@ export default function ProfileScreen() {
     try {
       const updateData: any = {
         name: name.trim(),
+        notificationRadius,
       };
 
       if (currentPassword && newPassword) {
@@ -132,6 +135,43 @@ export default function ProfileScreen() {
             editable={false}
           />
           <Text style={styles.helperText}>Email cannot be changed</Text>
+        </View>
+
+        {/* Notification Settings Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Notification Settings</Text>
+
+          <Text style={styles.label}>Push Notification Range</Text>
+          <Text style={styles.helperText}>
+            Get notified when new orders are posted within this distance from you
+          </Text>
+
+          <View style={styles.radiusOptions}>
+            {[
+              { label: '500m', value: 500 },
+              { label: '1km', value: 1000 },
+              { label: '2km', value: 2000 },
+              { label: '5km', value: 5000 },
+            ].map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.radiusOption,
+                  notificationRadius === option.value && styles.radiusOptionSelected,
+                ]}
+                onPress={() => setNotificationRadius(option.value)}
+              >
+                <Text
+                  style={[
+                    styles.radiusOptionText,
+                    notificationRadius === option.value && styles.radiusOptionTextSelected,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
         {/* Change Password Section */}
@@ -254,6 +294,35 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: '#FFF',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  radiusOptions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  radiusOption: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#DDD',
+    borderRadius: 8,
+    marginHorizontal: 4,
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+  },
+  radiusOptionSelected: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  radiusOptionText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
+  radiusOptionTextSelected: {
+    color: '#FFF',
     fontWeight: '600',
   },
 });

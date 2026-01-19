@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { authApi } from '../services/api';
+import notificationService from '../services/notification.service';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -45,6 +46,12 @@ export default function LoginScreen({ navigation }: Props) {
 
       // Save user info to AsyncStorage (token is already saved by api.ts in SecureStore)
       await AsyncStorage.setItem('user', JSON.stringify(response.user));
+
+      // Register for push notifications (non-blocking)
+      notificationService.registerForPushNotifications().catch((error) => {
+        console.error('Failed to register for push notifications:', error);
+        // Don't block login if push notification registration fails
+      });
 
       // Navigate to Home screen
       navigation.reset({
