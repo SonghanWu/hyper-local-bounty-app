@@ -158,6 +158,23 @@ This script will automatically detect your WiFi IP and update `mobile/config/api
   - Password change with current password verification
   - `updated_at` timestamp tracking
 
+**Phase 4.3 ✅**: Push Notifications System
+- Expo Push Notifications integration (iOS supported, Android requires Development Build)
+- User-configurable notification radius (500m, 1km, 2km, 5km)
+- Automatic push notifications for nearby orders
+  - Backend NotificationsService finds users within their custom radius
+  - Respects each user's notification preferences
+  - Filters by online/recent users (last 30 minutes)
+- Push token management
+  - `POST /users/push-token` - Register Expo push token
+  - Auto-enable `pushNotificationsEnabled` when token is saved
+  - Token validation using Expo SDK
+- Frontend notification handling
+  - notification.service.ts handles token registration
+  - App.tsx global listeners for notification events
+  - Deep linking: tapping notification opens order detail
+  - Notification permissions requested after login
+
 ### Phase 5 🚧 Next: Real-time Chat (1-on-1 per Order)
 
 ---
