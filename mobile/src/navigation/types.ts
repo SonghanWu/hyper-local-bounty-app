@@ -6,4 +6,5 @@ export type RootStackParamList = {
   MyOrders: undefined;
   Wallet: undefined;
   Profile: undefined;
+  Chat: { orderId: string; orderTitle: string };
 };

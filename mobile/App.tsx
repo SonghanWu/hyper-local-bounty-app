@@ -9,6 +9,7 @@ import OrderDetailScreen from './src/screens/OrderDetailScreen';
 import MyOrdersScreen from './src/screens/MyOrdersScreen';
 import WalletScreen from './src/screens/WalletScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import ChatScreen from './src/screens/ChatScreen';
 import { RootStackParamList } from './src/navigation/types';
 import notificationService from './src/services/notification.service';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -125,6 +126,13 @@ export default function App() {
           component={ProfileScreen}
           options={{
             title: 'Profile Settings',
+          }}
+        />
+        <Stack.Screen
+          name="Chat"
+          component={ChatScreen}
+          options={{
+            title: 'Chat',
           }}
         />
       </Stack.Navigator>

@@ -304,6 +304,7 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
     order.status !== 'COMPLETED' &&
     order.status !== 'CANCELLED';
   const canEdit = isRequester && (order.status === 'PENDING' || order.status === 'CANCELLED');
+  const canChat = (isRequester || isHelper) && order.status === 'ACCEPTED';
 
   // Convert latitude/longitude to numbers (PostgreSQL decimal returns as string)
   const latitude = typeof order.latitude === 'string' ? parseFloat(order.latitude) : order.latitude;
@@ -436,6 +437,20 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
               <Text style={styles.buttonText}>
                 {order.status === 'CANCELLED' ? 'Reactivate & Edit Order' : 'Edit Order'}
               </Text>
+            </TouchableOpacity>
+          )}
+
+          {canChat && (
+            <TouchableOpacity
+              style={[styles.button, styles.chatButton]}
+              onPress={() =>
+                navigation.navigate('Chat', {
+                  orderId: order.id,
+                  orderTitle: order.title,
+                })
+              }
+            >
+              <Text style={styles.buttonText}>💬 Open Chat</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -660,6 +675,9 @@ const styles = StyleSheet.create({
   },
   editButton: {
     backgroundColor: '#FF9500',
+  },
+  chatButton: {
+    backgroundColor: '#5AC8FA',
   },
   buttonText: {
     color: '#FFF',
