@@ -8,7 +8,9 @@ import api from './api';
  */
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowAlert: true, // Deprecated but kept for backward compatibility
+    shouldShowBanner: true, // New way: show notification banner
+    shouldShowList: true,   // New way: add to notification list
     shouldPlaySound: true,
     shouldSetBadge: true,
   }),
