@@ -82,6 +82,18 @@ else
   FAILED=$((FAILED + 1))
 fi
 
+sleep 2
+
+# Test 7: Phase 5 Chat
+echo -e "${YELLOW}Test 7: Phase 5 - Real-time Chat System${NC}"
+node tests/test-phase5-chat.js
+if [ $? -eq 0 ]; then
+  echo -e "${GREEN}✅ Test 7 PASSED${NC}\n"
+else
+  echo -e "${RED}❌ Test 7 FAILED${NC}\n"
+  FAILED=$((FAILED + 1))
+fi
+
 # Summary
 echo "=================================="
 if [ $FAILED -eq 0 ]; then

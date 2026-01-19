@@ -9,6 +9,7 @@ import { RedisModule } from './redis/redis.module';
 import { LocationModule } from './location/location.module';
 import { OrdersModule } from './orders/orders.module';
 import { WalletModule } from './wallet/wallet.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -30,6 +31,8 @@ import { WalletModule } from './wallet/wallet.module';
     OrdersModule,
     // Wallet
     WalletModule,
+    // Chat
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],
