@@ -1,0 +1,117 @@
+version: '3.8'
+
+services:
+  # ─── 数据库 ───────────────────────────────────────────────
+  postgres:
+    image: postgis/postgis:15-3.3
+    container_name: bounty-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_DATABASE}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - bounty-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── 缓存 / 地理位置 ─────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: bounty-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - bounty-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── 数据库 Migration（只运行一次，完成后自动退出）────────
+  # 原理：用和 app 相同的镜像，但只执行 migration:run，
+  # 跑完自动退出（exit 0）。app 服务 depends_on 这个服务
+  # 完成后才启动，确保数据库 schema 始终是最新的。
+  migrator:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bounty-migrator
+    restart: on-failure
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
+    # 直接调用编译好的 JS 版 TypeORM CLI（不需要 ts-node）
+    command: node ./node_modules/.bin/typeorm migration:run -d dist/config/typeorm.config.js
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - bounty-network
+
+  # ─── NestJS 后端 ─────────────────────────────────────────
+  app:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bounty-app
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-7d}
+    # 注意：不直接对外暴露端口，所有流量通过 Nginx 进入
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    networks:
+      - bounty-network
+
+  # ─── Nginx 反向代理 ───────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: bounty-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Nginx 配置文件（只读挂载）
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Let's Encrypt 证书目录（申请 SSL 后挂载）
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - app
+    networks:
+      - bounty-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  bounty-network:
+    driver: bridge
