@@ -1,0 +1,111 @@
+name: Build and Deploy to ECS
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION:      ${{ secrets.AWS_REGION }}
+  ECR_REPOSITORY:  ${{ secrets.ECR_REPOSITORY }}
+  ECS_CLUSTER:     ${{ secrets.ECS_CLUSTER }}
+  ECS_SERVICE:     ${{ secrets.ECS_SERVICE }}
+  TASK_DEFINITION: ecs/task-definition.json
+  CONTAINER_NAME:  pingig-app
+
+jobs:
+  deploy:
+    name: Build → Migrate → Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout code ────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Authenticate with AWS ─────────────────────────────────
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      # ── 3. Log in to ECR ──────────────────────────────────────────
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ── 4. Build Docker image and push to ECR ────────────────────
+      - name: Build, tag, and push image to ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG:    ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./backend
+          docker push    $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          # Also tag as latest for convenience
+          docker tag  $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+                      $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      # ── 5. Run database migrations ────────────────────────────────
+      # Runs the same image with a different command, waits for it to
+      # finish successfully before proceeding to the service deploy.
+      # This mirrors the migrator service from docker-compose but runs
+      # as a one-off ECS task in the CI pipeline instead.
+      - name: Run database migrations
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG:    ${{ github.sha }}
+        run: |
+          TASK_ARN=$(aws ecs run-task \
+            --cluster $ECS_CLUSTER \
+            --task-definition pingig-migrator \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.SUBNET_IDS }}],securityGroups=[${{ secrets.SECURITY_GROUP_ID }}],assignPublicIp=ENABLED}" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"$CONTAINER_NAME\",\"command\":[\"node\",\"./node_modules/.bin/typeorm\",\"migration:run\",\"-d\",\"dist/config/typeorm.config.js\"]}]}" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          echo "Migration task ARN: $TASK_ARN"
+
+          # Wait until the migration task stops
+          aws ecs wait tasks-stopped \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN
+
+          # Check exit code — fail the pipeline if migration failed
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Migration failed with exit code $EXIT_CODE"
+            exit 1
+          fi
+          echo "Migration completed successfully"
+
+      # ── 6. Point task definition at the new image ─────────────────
+      - name: Update task definition with new image
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ env.TASK_DEFINITION }}
+          container-name:  ${{ env.CONTAINER_NAME }}
+          image:           ${{ steps.build-image.outputs.image }}
+
+      # ── 7. Deploy to ECS — rolling update ─────────────────────────
+      # ECS replaces old tasks with new ones gradually (no downtime).
+      # The service waits for the new tasks to pass health checks
+      # before terminating the old ones.
+      - name: Deploy to ECS service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition:          ${{ steps.task-def.outputs.task-definition }}
+          service:                  ${{ env.ECS_SERVICE }}
+          cluster:                  ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
