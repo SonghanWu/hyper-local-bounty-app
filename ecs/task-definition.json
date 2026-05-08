@@ -6,13 +6,13 @@
   "cpu": "512",
   "memory": "1024",
 
-  "executionRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/ecsTaskExecutionRole",
-  "taskRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/ecsTaskRole",
+  "executionRoleArn": "arn:aws:iam::105100038977:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::105100038977:role/ecsTaskRole",
 
   "containerDefinitions": [
     {
       "name": "pingig-app",
-      "image": "YOUR_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/pingig-app:latest",
+      "image": "105100038977.dkr.ecr.us-east-1.amazonaws.com/pingig-app:latest",
       "essential": true,
 
       "portMappings": [
@@ -33,27 +33,27 @@
       "secrets": [
         {
           "name": "DB_HOST",
-          "valueFrom": "arn:aws:ssm:YOUR_REGION:YOUR_ACCOUNT_ID:parameter/pingig/DB_HOST"
+          "valueFrom": "arn:aws:ssm:us-east-1:105100038977:parameter/pingig/DB_HOST"
         },
         {
           "name": "DB_USERNAME",
-          "valueFrom": "arn:aws:ssm:YOUR_REGION:YOUR_ACCOUNT_ID:parameter/pingig/DB_USERNAME"
+          "valueFrom": "arn:aws:ssm:us-east-1:105100038977:parameter/pingig/DB_USERNAME"
         },
         {
           "name": "DB_DATABASE",
-          "valueFrom": "arn:aws:ssm:YOUR_REGION:YOUR_ACCOUNT_ID:parameter/pingig/DB_DATABASE"
+          "valueFrom": "arn:aws:ssm:us-east-1:105100038977:parameter/pingig/DB_DATABASE"
         },
         {
           "name": "REDIS_HOST",
-          "valueFrom": "arn:aws:ssm:YOUR_REGION:YOUR_ACCOUNT_ID:parameter/pingig/REDIS_HOST"
+          "valueFrom": "arn:aws:ssm:us-east-1:105100038977:parameter/pingig/REDIS_HOST"
         },
         {
           "name": "DB_PASSWORD",
-          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_ACCOUNT_ID:secret:pingig/DB_PASSWORD"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:105100038977:secret:pingig/DB_PASSWORD"
         },
         {
           "name": "JWT_SECRET",
-          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_ACCOUNT_ID:secret:pingig/JWT_SECRET"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:105100038977:secret:pingig/JWT_SECRET"
         }
       ],
 
@@ -61,7 +61,7 @@
         "logDriver": "awslogs",
         "options": {
           "awslogs-group":         "/ecs/pingig-app",
-          "awslogs-region":        "YOUR_REGION",
+          "awslogs-region":        "us-east-1",
           "awslogs-stream-prefix": "ecs",
           "awslogs-create-group":  "true"
         }
