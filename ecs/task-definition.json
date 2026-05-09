@@ -33,7 +33,7 @@
       "secrets": [
         {
           "name": "DB_HOST",
-          "valueFrom": "arn:aws:ssm:us-east-1:105100038977:parameter/pingig/DB_HOST"
+          "valueFrom": "arn:aws:ssm:us-east-1:105100038977:parameter/pingig.DB_HOST"
         },
         {
           "name": "DB_USERNAME",
@@ -41,11 +41,11 @@
         },
         {
           "name": "DB_DATABASE",
-          "valueFrom": "arn:aws:ssm:us-east-1:105100038977:parameter/pingig/DB_DATABASE"
+          "valueFrom": "arn:aws:ssm:us-east-1:105100038977:parameter/pingig.DB_DATABASE"
         },
         {
           "name": "REDIS_HOST",
-          "valueFrom": "arn:aws:ssm:us-east-1:105100038977:parameter/pingig/REDIS_HOST"
+          "valueFrom": "arn:aws:ssm:us-east-1:105100038977:parameter/pingig.REDIS_HOST"
         },
         {
           "name": "DB_PASSWORD",
