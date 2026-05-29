@@ -87,6 +87,10 @@ jobs:
           echo "Backend failed to start"
           exit 1
 
+      - name: Install test dependencies
+        working-directory: tests
+        run: npm install
+
       - name: Run integration tests
         run: bash tests/run-all-tests.sh
 
