@@ -62,7 +62,7 @@ jobs:
         run: |
           TASK_ARN=$(aws ecs run-task \
             --cluster $ECS_CLUSTER \
-            --task-definition pingig-migrator \
+            --task-definition pingig-app \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.SUBNET_IDS }}],securityGroups=[${{ secrets.SECURITY_GROUP_ID }}],assignPublicIp=ENABLED}" \
             --overrides "{\"containerOverrides\":[{\"name\":\"$CONTAINER_NAME\",\"command\":[\"node\",\"./node_modules/.bin/typeorm\",\"migration:run\",\"-d\",\"dist/config/typeorm.config.js\"]}]}" \
