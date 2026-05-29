@@ -9,10 +9,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   constructor(private configService: ConfigService) {}
 
   async onModuleInit() {
+    const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
     this.client = createClient({
       socket: {
         host: this.configService.get<string>('REDIS_HOST', 'localhost'),
         port: this.configService.get<number>('REDIS_PORT', 6379),
+        tls: isProduction,
       },
     });
 
