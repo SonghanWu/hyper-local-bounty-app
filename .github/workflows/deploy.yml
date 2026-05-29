@@ -1,4 +1,4 @@
-name: Build and Deploy to ECS
+name: CI/CD Pipeline
 
 on:
   push:
@@ -13,16 +13,93 @@ env:
   CONTAINER_NAME:  pingig-app
 
 jobs:
-  deploy:
-    name: Build → Migrate → Deploy
+  # ── CI: Integration Tests ─────────────────────────────────────────────
+  test:
+    name: Integration Tests
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. Checkout code ────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── 2. Authenticate with AWS ─────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci --legacy-peer-deps
+
+      - name: Build backend
+        working-directory: backend
+        run: npm run build
+
+      - name: Start PostgreSQL and Redis
+        working-directory: backend
+        run: docker compose up -d
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for PostgreSQL..."
+          until docker exec bounty-postgres pg_isready -U bounty_user -d bounty_db; do sleep 2; done
+          echo "Waiting for Redis..."
+          until docker exec bounty-redis redis-cli ping; do sleep 2; done
+
+      - name: Run database migrations
+        working-directory: backend
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USERNAME: bounty_user
+          DB_PASSWORD: bounty_password
+          DB_DATABASE: bounty_db
+          NODE_ENV: development
+        run: npm run migration:run
+
+      - name: Start backend server
+        working-directory: backend
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USERNAME: bounty_user
+          DB_PASSWORD: bounty_password
+          DB_DATABASE: bounty_db
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          JWT_SECRET: ci-test-secret-do-not-use-in-prod
+          NODE_ENV: development
+          PORT: 3000
+        run: node dist/main.js &
+
+      - name: Wait for backend to be ready
+        run: |
+          for i in {1..30}; do
+            if curl -sf http://localhost:3000/health > /dev/null; then
+              echo "Backend is ready"
+              exit 0
+            fi
+            echo "Attempt $i/30, retrying in 3s..."
+            sleep 3
+          done
+          echo "Backend failed to start"
+          exit 1
+
+      - name: Run integration tests
+        run: bash tests/run-all-tests.sh
+
+  # ── CD: Build → Migrate → Deploy ─────────────────────────────────────
+  deploy:
+    name: Build → Migrate → Deploy
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -30,12 +107,10 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region:            ${{ env.AWS_REGION }}
 
-      # ── 3. Log in to ECR ──────────────────────────────────────────
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # ── 4. Build Docker image and push to ECR ────────────────────
       - name: Build, tag, and push image to ECR
         id: build-image
         env:
@@ -44,39 +119,28 @@ jobs:
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./backend
           docker push    $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          # Also tag as latest for convenience
           docker tag  $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
                       $ECR_REGISTRY/$ECR_REPOSITORY:latest
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      # ── 5. Run database migrations ────────────────────────────────
-      # Runs the same image with a different command, waits for it to
-      # finish successfully before proceeding to the service deploy.
-      # This mirrors the migrator service from docker-compose but runs
-      # as a one-off ECS task in the CI pipeline instead.
-      - name: Run database migrations
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG:    ${{ github.sha }}
+      - name: Run database migrations on Aurora
         run: |
           TASK_ARN=$(aws ecs run-task \
             --cluster $ECS_CLUSTER \
             --task-definition pingig-app \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.SUBNET_IDS }}],securityGroups=[${{ secrets.SECURITY_GROUP_ID }}],assignPublicIp=ENABLED}" \
-            --overrides "{\"containerOverrides\":[{\"name\":\"$CONTAINER_NAME\",\"command\":[\"node\",\"./node_modules/.bin/typeorm\",\"migration:run\",\"-d\",\"dist/config/typeorm.config.js\"]}]}" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"$CONTAINER_NAME\",\"command\":[\"node\",\"node_modules/.bin/typeorm\",\"migration:run\",\"-d\",\"dist/config/typeorm.config.js\"]}]}" \
             --query 'tasks[0].taskArn' \
             --output text)
 
-          echo "Migration task ARN: $TASK_ARN"
+          echo "Migration task: $TASK_ARN"
 
-          # Wait until the migration task stops
           aws ecs wait tasks-stopped \
             --cluster $ECS_CLUSTER \
             --tasks $TASK_ARN
 
-          # Check exit code — fail the pipeline if migration failed
           EXIT_CODE=$(aws ecs describe-tasks \
             --cluster $ECS_CLUSTER \
             --tasks $TASK_ARN \
@@ -89,7 +153,6 @@ jobs:
           fi
           echo "Migration completed successfully"
 
-      # ── 6. Point task definition at the new image ─────────────────
       - name: Update task definition with new image
         id: task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
@@ -98,14 +161,10 @@ jobs:
           container-name:  ${{ env.CONTAINER_NAME }}
           image:           ${{ steps.build-image.outputs.image }}
 
-      # ── 7. Deploy to ECS — rolling update ─────────────────────────
-      # ECS replaces old tasks with new ones gradually (no downtime).
-      # The service waits for the new tasks to pass health checks
-      # before terminating the old ones.
       - name: Deploy to ECS service
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
-          task-definition:          ${{ steps.task-def.outputs.task-definition }}
-          service:                  ${{ env.ECS_SERVICE }}
-          cluster:                  ${{ env.ECS_CLUSTER }}
+          task-definition:            ${{ steps.task-def.outputs.task-definition }}
+          service:                    ${{ env.ECS_SERVICE }}
+          cluster:                    ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true

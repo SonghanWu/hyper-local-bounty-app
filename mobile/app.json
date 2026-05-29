@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "Hyper Local Bounty",
-    "slug": "hyper-local-bounty-app",
+    "name": "PinGig",
+    "slug": "pingig",
     "version": "1.0.0",
-    "description": "Location-based bounty app where users can post and accept nearby tasks for rewards.",
+    "description": "Find and complete nearby gigs, or post tasks for others to help with.",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -20,6 +20,7 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
+      "bundleIdentifier": "com.pingig.app",
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app needs your location to show nearby bounties and users.",
@@ -30,6 +31,7 @@
       }
     },
     "android": {
+      "package": "com.pingig.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
