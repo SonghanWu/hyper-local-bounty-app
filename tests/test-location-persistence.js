@@ -11,8 +11,17 @@ const TEST_USER = {
 
 const LOCATION = { latitude: 42.2657, longitude: -83.7487 };
 
+async function ensureUserExists() {
+  await fetch('http://localhost:3000/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(TEST_USER)
+  }).catch(() => {});
+}
+
 async function testLocationPersistence() {
   console.log('🧪 Test: Location persistence (Redis + PostgreSQL)\n');
+  await ensureUserExists();
 
   // Step 1: Login
   console.log('1️⃣ Logging in...');

@@ -48,7 +48,8 @@ export class UsersService {
   }
 
   async update(userId: string, updateData: Partial<User>): Promise<User> {
-    await this.usersRepository.update(userId, updateData);
-    return this.findById(userId);
+    const user = await this.findById(userId);
+    Object.assign(user, updateData);
+    return this.usersRepository.save(user);
   }
 }

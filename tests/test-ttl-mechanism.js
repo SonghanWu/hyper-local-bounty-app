@@ -11,6 +11,14 @@ const TEST_USER = {
 
 const LOCATION = { latitude: 42.2932, longitude: -83.7162 };
 
+async function ensureUserExists() {
+  await fetch('http://localhost:3000/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(TEST_USER)
+  }).catch(() => {});
+}
+
 async function checkRedisTTL(userId) {
   const { stdout } = await execPromise(
     `docker exec bounty-redis redis-cli TTL user:${userId}:location_active`
@@ -20,6 +28,7 @@ async function checkRedisTTL(userId) {
 
 async function testTTLMechanism() {
   console.log('🧪 Test: TTL mechanism (5-minute expiration)\n');
+  await ensureUserExists();
 
   // Step 1: Login
   console.log('1️⃣ Logging in...');

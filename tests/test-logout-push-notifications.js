@@ -11,8 +11,19 @@ const TEST_USER = {
 
 const LOCATION = { latitude: 42.2776, longitude: -83.7382 };
 
+async function ensureUserExists() {
+  await fetch('http://localhost:3000/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(TEST_USER)
+  }).catch(() => {});
+}
+
 async function testLogoutDisablesPushNotifications() {
   console.log('🧪 Test: Logout disables push notifications\n');
+
+  // Ensure test user exists (registers if not, ignores conflict if already exists)
+  await ensureUserExists();
 
   // Step 1: Login
   console.log('1️⃣ Logging in...');
