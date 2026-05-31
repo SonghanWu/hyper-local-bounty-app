@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "PinGig",
-    "slug": "pingig",
+    "slug": "hyper-local-bounty-app",
     "version": "1.0.0",
     "description": "Find and complete nearby gigs, or post tasks for others to help with.",
     "orientation": "portrait",
