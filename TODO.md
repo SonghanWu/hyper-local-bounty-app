@@ -1,5 +1,19 @@
 # TODO - Future Enhancements
 
+## 0. DNS Migration to Route 53
+
+**Why:** pin-gig.com DNS is currently managed by Vercel, which causes friction every time we need to add AWS-related records (ACM, ALB, SES, CloudFront, etc.). Moving to Route 53 centralizes all DNS management inside AWS.
+
+**Steps:**
+1. Create Hosted Zone in Route 53: `aws route53 create-hosted-zone --name pin-gig.com --caller-reference $(date +%s)`
+2. Copy all existing records from Vercel to Route 53 (www → Vercel, @, google._domainkey, SPF, api → ALB, ACM validation CNAME)
+3. Find domain registrar (likely Squarespace) → update NS records to the 4 Route 53 nameservers
+4. Wait for NS propagation (up to 48 hours), then delete records from Vercel
+
+**Benefit:** Future AWS services (SES for email, CloudFront for CDN, new ACM certs) can be wired up without touching Vercel.
+
+---
+
 ## 1. Map Integration (地图功能)
 
 ### 需求
