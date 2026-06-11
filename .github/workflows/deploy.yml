@@ -130,32 +130,65 @@ jobs:
 
       - name: Run database migrations on Aurora
         run: |
-          TASK_ARN=$(aws ecs run-task \
-            --cluster $ECS_CLUSTER \
-            --task-definition pingig-app \
-            --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.SUBNET_IDS }}],securityGroups=[${{ secrets.SECURITY_GROUP_ID }}],assignPublicIp=ENABLED}" \
-            --overrides "{\"containerOverrides\":[{\"name\":\"$CONTAINER_NAME\",\"command\":[\"node\",\"node_modules/.bin/typeorm\",\"migration:run\",\"-d\",\"dist/config/typeorm.config.js\"]}]}" \
-            --query 'tasks[0].taskArn' \
-            --output text)
+          set -euo pipefail
 
-          echo "Migration task: $TASK_ARN"
+          # Reuse the running ECS service's network configuration for the one-off
+          # migration task. This keeps the task in the same known-good subnets and
+          # security group as the live app, instead of the SUBNET_IDS /
+          # SECURITY_GROUP_ID secrets which previously drifted and caused
+          # intermittent provisioning failures (container never started ->
+          # exitCode None -> the whole deploy failed with no usable error).
+          RUN_NET=$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --query 'services[0].networkConfiguration' \
+            --output json | jq -c '{awsvpcConfiguration: .awsvpcConfiguration}')
+          echo "Using network configuration: $RUN_NET"
 
-          aws ecs wait tasks-stopped \
-            --cluster $ECS_CLUSTER \
-            --tasks $TASK_ARN
+          MIGRATION_CMD='{"containerOverrides":[{"name":"'"$CONTAINER_NAME"'","command":["node","node_modules/.bin/typeorm","migration:run","-d","dist/config/typeorm.config.js"]}]}'
 
-          EXIT_CODE=$(aws ecs describe-tasks \
-            --cluster $ECS_CLUSTER \
-            --tasks $TASK_ARN \
-            --query 'tasks[0].containers[0].exitCode' \
-            --output text)
+          attempt=1
+          max_attempts=2
+          while [ "$attempt" -le "$max_attempts" ]; do
+            echo "::group::Migration attempt $attempt/$max_attempts"
+            TASK_ARN=$(aws ecs run-task \
+              --cluster "$ECS_CLUSTER" \
+              --task-definition pingig-app \
+              --launch-type FARGATE \
+              --network-configuration "$RUN_NET" \
+              --overrides "$MIGRATION_CMD" \
+              --query 'tasks[0].taskArn' \
+              --output text)
+            echo "Migration task: $TASK_ARN"
 
-          if [ "$EXIT_CODE" != "0" ]; then
-            echo "Migration failed with exit code $EXIT_CODE"
+            aws ecs wait tasks-stopped --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN"
+
+            DESC=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN" \
+              --query 'tasks[0].{exit:containers[0].exitCode,stopCode:stopCode,reason:stoppedReason}' \
+              --output json)
+            EXIT_CODE=$(echo "$DESC" | jq -r '.exit')
+            STOP_CODE=$(echo "$DESC" | jq -r '.stopCode')
+            STOP_REASON=$(echo "$DESC" | jq -r '.reason')
+            echo "exitCode=$EXIT_CODE stopCode=$STOP_CODE stoppedReason=$STOP_REASON"
+            echo "::endgroup::"
+
+            if [ "$EXIT_CODE" = "0" ]; then
+              echo "Migration completed successfully"
+              exit 0
+            fi
+
+            # exitCode null means the container never started (a provisioning /
+            # ResourceInitialization failure) — transient, so retry once. A real
+            # migration error produces a non-null, non-zero exit code: fail fast.
+            if { [ "$EXIT_CODE" = "null" ] || [ "$EXIT_CODE" = "None" ]; } && [ "$attempt" -lt "$max_attempts" ]; then
+              echo "Container did not start (provisioning failure) — retrying..."
+              attempt=$((attempt + 1))
+              continue
+            fi
+
+            echo "Migration failed (exitCode=$EXIT_CODE, stopCode=$STOP_CODE): $STOP_REASON"
             exit 1
-          fi
-          echo "Migration completed successfully"
+          done
 
       - name: Update task definition with new image
         id: task-def
