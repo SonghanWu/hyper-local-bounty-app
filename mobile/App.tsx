@@ -5,6 +5,7 @@ import * as Notifications from 'expo-notifications';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import HomeScreen from './src/screens/HomeScreen';
+import MapScreen from './src/screens/MapScreen';
 import OrderDetailScreen from './src/screens/OrderDetailScreen';
 import MyOrdersScreen from './src/screens/MyOrdersScreen';
 import WalletScreen from './src/screens/WalletScreen';
@@ -98,6 +99,13 @@ export default function App() {
           component={HomeScreen}
           options={{
             headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="Map"
+          component={MapScreen}
+          options={{
+            title: 'Nearby Map',
           }}
         />
         <Stack.Screen

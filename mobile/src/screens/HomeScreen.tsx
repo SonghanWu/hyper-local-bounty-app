@@ -333,6 +333,13 @@ export default function HomeScreen({ navigation }: Props) {
           </TouchableOpacity>
 
           <TouchableOpacity
+            style={styles.mapButton}
+            onPress={() => navigation.navigate('Map')}
+          >
+            <Text style={styles.mapButtonText}>🗺️ Map View</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={styles.myOrdersButton}
             onPress={() => navigation.navigate('MyOrders')}
           >
@@ -819,6 +826,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   postOrderButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  mapButton: {
+    backgroundColor: '#00BCD4',
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  mapButtonText: {
     color: '#FFF',
     fontSize: 16,
     fontWeight: 'bold',
