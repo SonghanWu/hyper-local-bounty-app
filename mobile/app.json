@@ -27,7 +27,8 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs your location to update your position and show nearby bounties.",
         "UIBackgroundModes": [
           "remote-notification"
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -38,11 +39,6 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyD3DzaHzXwDyc1Nu5IJwGT_hFf4Ys-ZEos"
-        }
-      },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
